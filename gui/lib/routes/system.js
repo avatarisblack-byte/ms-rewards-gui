@@ -7,30 +7,13 @@ const path = require('path')
 const os = require('os')
 const { spawn } = require('child_process')
 
-// ===== 静默期（Grace Period）状态：客户端断开后延迟销毁，刷新页面不掉服务 =====
-// 页面刷新会短暂断开 SSE 连接，若立即 process.exit 会导致"刷新即掉线"。
-// 改为：断开后进入 5s 倒计时，期间有新连接（用户刷新）则取消销毁；倒计时结束仍无连接才退出。
-let activeKeepaliveConnections = 0 // 当前活跃的 keepalive 连接数（支持多标签页）
-let graceTimer = null              // 静默期倒计时句柄
-const GRACE_PERIOD_MS = 5000       // 5 秒缓冲
-
-function cancelGracePeriod() {
-    if (graceTimer) {
-        clearTimeout(graceTimer)
-        graceTimer = null
-        console.log('[GUI] 检测到新连接，取消服务销毁')
-    }
-}
-
-function startGracePeriod() {
-    if (graceTimer) return // 已在倒计时中，无需重复启动
-    console.log(`[GUI] 客户端连接全部断开，进入 ${GRACE_PERIOD_MS / 1000}s 静默期...`)
-    graceTimer = setTimeout(() => {
-        graceTimer = null
-        console.log('[GUI] 静默期结束，无新连接，服务退出')
-        process.exit(0)
-    }, GRACE_PERIOD_MS)
-}
+// ===== 服务常驻（2026-08-23）：不再"页面断开即退出" =====
+// 原设计：所有 SSE 保活连接断开后进入 5s 静默期，超时无新连接则 process.exit(0) 自杀。
+// 问题：Edge 的「睡眠标签页 / 内存节省器」会整体冻结后台标签页（页面 JS 定时器与网络
+// 连接全部挂起），SSE 连接断开后页面无法执行退避重连，5s 静默期走完服务即被"清掉"，
+// 且静默启动模式下无窗口、完全无感知。
+// 改为：keepalive 断开仅记日志，服务常驻；停止方式仅剩 /api/shutdown、stop-gui.bat、Ctrl+C。
+let activeKeepaliveConnections = 0 // 当前活跃的 keepalive 连接数（支持多标签页，仅用于日志）
 
 function handleSystem(req, res, pathname, ctx) {
     const { http, logCache } = ctx
@@ -110,8 +93,8 @@ function handleSystem(req, res, pathname, ctx) {
         return true
     }
 
-    // GET /api/keepalive（SSE 长连接保活 + 静默期优雅降级）
-    // 连接计数：支持多标签页/刷新时的并行连接；仅当所有连接都断开才进入静默期倒计时
+    // GET /api/keepalive（SSE 长连接保活；服务常驻，连接断开不触发退出）
+    // 连接计数保留仅用于日志：支持多标签页/刷新时的并行连接，全部断开时提示常驻状态
     if (pathname === '/api/keepalive') {
         if (req.method !== 'GET') {
             http.sendJson(res, 405, { error: '仅支持 GET /api/keepalive' })
@@ -125,11 +108,10 @@ function handleSystem(req, res, pathname, ctx) {
         })
         res.write(': connected\n\n')
         activeKeepaliveConnections++
-        cancelGracePeriod() // 新连接到达：取消销毁倒计时，复用现有服务
         req.on('close', () => {
             activeKeepaliveConnections--
             if (activeKeepaliveConnections <= 0) {
-                startGracePeriod() // 全部断开：进入静默期，而非立即退出
+                console.log('[GUI] 所有页面已断开保活连接，服务继续常驻运行')
             }
         })
         return true

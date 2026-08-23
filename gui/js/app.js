@@ -1591,8 +1591,9 @@
             // 第一时间 close()：close 会把 readyState 置为 CLOSED 并取消浏览器已安排的
             // 内置重连计时器。随后改用手动 setTimeout 指数退避
             // （5s→10s→20s→40s→60s 封顶），onopen 成功时重置计数。
-            // 页面刷新场景：DOMContentLoaded 重新执行立即建立新连接（首次无延迟），
-            // 后端 5s 静默期语义不变，刷新页面不会导致服务掉线。
+            // 页面刷新场景：DOMContentLoaded 重新执行立即建立新连接（首次无延迟）。
+            // 服务常驻（2026-08-23 起）：SSE 断开不再影响服务存活（后端不再有 5s 静默期自杀），
+            // 此处的退避重连仅用于页面被冻结/网络波动后恢复时尽快重新建立保活连接。
             let keepaliveFailCount = 0;
             let keepaliveSource = null;
             const KEEPALIVE_BASE_MS = 5000;

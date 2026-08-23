@@ -10,7 +10,7 @@
  *   2. 真实 HTTP 请求：验证错误场景下的响应码与服务存活。
  *
  * 生命周期用例会劫持 process.exit（记录而不真正退出），劫持不再恢复，
- * 以避免静默期残留定时器在测试收尾阶段终止测试进程。
+ * 以避免 shutdown 用例的退出调用在测试收尾阶段终止测试进程。
  */
 const { test, describe, before, after } = require('node:test')
 const assert = require('node:assert')
@@ -268,14 +268,14 @@ describe('R-F 前端脚本容错与输出编码', () => {
     })
 })
 
-// ============ 生命周期：keepalive 静默期与 shutdown ============
-describe('R-L 生命周期与静默期（劫持 process.exit 观测）', () => {
+// ============ 生命周期：keepalive 常驻与 shutdown ============
+describe('R-L 生命周期与常驻（劫持 process.exit 观测）', () => {
     let exitCalls = []
     let liveController = null
 
     before(() => {
         exitCalls = []
-        // 劫持后不再恢复：静默期定时器可能在测试收尾阶段触发
+        // 劫持后不再恢复：shutdown 用例会调用 process.exit（记录而不真正退出）
         process.exit = code => { exitCalls.push(code === undefined ? 0 : code) }
     })
 
@@ -300,7 +300,7 @@ describe('R-L 生命周期与静默期（劫持 process.exit 观测）', () => {
     test('R-L02 页面刷新（断开后 2s 内重连）不应触发服务退出', async () => {
         liveController.abort()
         await sleep(2000)
-        assert.deepStrictEqual(exitCalls, [], `静默期未结束即退出: ${JSON.stringify(exitCalls)}`)
+        assert.deepStrictEqual(exitCalls, [], `断开期间不应触发退出: ${JSON.stringify(exitCalls)}`)
         liveController = new AbortController()
         const token = await H.getAuthToken(BASE)
         const res = await fetch(`${BASE}/api/keepalive`, {
@@ -312,10 +312,11 @@ describe('R-L 生命周期与静默期（劫持 process.exit 观测）', () => {
         assert.deepStrictEqual(exitCalls, [], '重连后仍触发了退出')
     })
 
-    test('R-L03 所有保活连接断开超过 5s 静默期后触发服务退出', async () => {
+    test('R-L03 所有保活连接断开后服务保持存活（常驻模式，不再有静默期自杀）【期望依据：Edge 睡眠标签页冻结页面导致 SSE 断开时页面无法重连，原 5s 静默期自杀会把 GUI 服务清掉；服务存活不得依赖浏览器页面连接】', async () => {
         liveController.abort()
+        // 等待超过原 5s 静默期，服务仍不应退出（原行为：exitCalls 应为 [0]）
         await sleep(6500)
-        assert.deepStrictEqual(exitCalls, [0], `静默期结束未按预期退出: ${JSON.stringify(exitCalls)}`)
+        assert.deepStrictEqual(exitCalls, [], `断开超过原静默期后不应退出: ${JSON.stringify(exitCalls)}`)
     })
 
     test('R-L04 POST /api/shutdown 先响应成功再退出进程', async () => {
