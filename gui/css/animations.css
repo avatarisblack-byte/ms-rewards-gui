@@ -1,0 +1,26 @@
+/* ===== 图表动画样式（与 js/animator.js 配套） =====
+ * 目标：
+ * 1. 首次渲染时柱子从坐标轴 0 竖直升起到最新值（不做 x 轴横移，避免"左上角斜飞"）
+ * 2. 数据更新时从上次显示值平滑过渡到最新值（不归零重飞）
+ * Chart.js v4 的动画由 options.animations 控制（见 js/animator.js），
+ * 此文件承载图表容器的辅助样式。
+ */
+
+/* 图表容器：禁用文本选中（柱状图 hover 时防止页面抖动/误选） */
+.chart-canvas-wrapper {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* 图表加载占位（Chart.js 渲染前的灰色骨架，与 main.css 的 .chart-placeholder 呼应） */
+.chart-placeholder {
+    background-color: #f3f4f6;
+    border: 2px dashed #d1d5db;
+    border-radius: 0.5rem;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    font-weight: 500;
+}

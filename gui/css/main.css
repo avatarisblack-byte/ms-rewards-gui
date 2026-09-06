@@ -1,0 +1,385 @@
+/* ===== GUI 自定义样式（从 design-reference.html 内联 <style> 抽取） ===== */
+
+/* ===== 设计系统 CSS 变量 ===== */
+:root {
+    /* emil-design-eng: 强 ease-out 用于交互反馈 */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* 图表加载占位（Chart.js 渲染前显示） */
+.chart-placeholder {
+    background-color: #f3f4f6;
+    border: 2px dashed #d1d5db;
+    border-radius: 0.5rem;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+/* 卡片阴影（页面所有 card-shadow 卡片通用） */
+.card-shadow {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+/* ===== 按钮组件类（2026-08-19 设计统一：层次感/可访问性/按压反馈） ===== */
+
+/* 基础按钮：统一尺寸、过渡、按压、焦点态 */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding: 0 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    appearance: none;
+    /* emil: 精确指定过渡属性 + 自定义 ease-out；transform 160ms 供按压反馈 */
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 160ms var(--ease-out);
+}
+/* 按压反馈：按钮必须给用户"听见"的反馈 */
+.btn:active {
+    transform: scale(0.97);
+}
+/* 键盘可访问性：焦点环 */
+.btn:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+/* 减少动态偏好：移除位移反馈，仅保留颜色过渡 */
+@media (prefers-reduced-motion: reduce) {
+    .btn {
+        transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+    }
+    .btn:active {
+        transform: none;
+    }
+}
+
+/* 深色核心操作（启动任务）：最高层级 CTA */
+.btn-dark {
+    background-color: #111827;
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-dark:hover {
+        background-color: #1f2937;
+    }
+}
+.btn-dark:active {
+    background-color: #030712;
+}
+
+/* 主操作（添加/保存/确认）：蓝色实心 */
+.btn-primary {
+    background-color: #2563eb;
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover {
+        background-color: #1d4ed8;
+    }
+}
+.btn-primary:active {
+    background-color: #1e40af;
+}
+
+/* 紧急危险操作（停止任务）：红色实心 */
+.btn-danger {
+    background-color: #dc2626;
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-danger:hover {
+        background-color: #b91c1c;
+    }
+}
+.btn-danger:active {
+    background-color: #991b1b;
+}
+
+/* 次级操作（导出/导入/打开配置）：白底描边 */
+.btn-secondary {
+    background-color: #fff;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-secondary:hover {
+        background-color: #f9fafb;
+        border-color: #9ca3af;
+    }
+}
+.btn-secondary:active {
+    background-color: #f3f4f6;
+}
+
+/* 次级危险操作（关闭服务/重置默认）：红字描边（降低红色泛滥） */
+.btn-danger-ghost {
+    background-color: #fff;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-danger-ghost:hover {
+        background-color: #fef2f2;
+        border-color: #fca5a5;
+    }
+}
+.btn-danger-ghost:active {
+    background-color: #fee2e2;
+}
+
+/* 取消操作（弹窗）：中性描边 */
+.btn-ghost {
+    background-color: #fff;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-ghost:hover {
+        background-color: #f9fafb;
+    }
+}
+.btn-ghost:active {
+    background-color: #f3f4f6;
+}
+
+/* 图标按钮（账号卡片设置/删除） */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease, transform 160ms var(--ease-out);
+}
+.btn-icon:active {
+    transform: scale(0.95);
+}
+.btn-icon:focus-visible {
+    outline: 2px solid;
+    outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .btn-icon {
+        transition: background-color 150ms ease, color 150ms ease;
+    }
+    .btn-icon:active {
+        transform: none;
+    }
+}
+
+/* 图标按钮：设置（蓝） */
+.btn-icon-primary {
+    color: #2563eb;
+    background-color: #eff6ff;
+}
+.btn-icon-primary:focus-visible {
+    outline-color: #2563eb;
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-icon-primary:hover {
+        background-color: #dbeafe;
+    }
+}
+
+/* 图标按钮：删除（红） */
+.btn-icon-danger {
+    color: #dc2626;
+    background-color: #fef2f2;
+}
+.btn-icon-danger:focus-visible {
+    outline-color: #dc2626;
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-icon-danger:hover {
+        background-color: #fee2e2;
+    }
+}
+
+/* ===== 弹窗进入/退出（review-animations：modal 居中豁免，scale(0.96)+opacity，250ms ease-out，进出对称） ===== */
+.modal-root .modal-backdrop {
+    transition: opacity 250ms var(--ease-out);
+}
+.modal-root .modal-surface {
+    transform-origin: center; /* modal 豁免：不锚定触发器，保持居中缩放 */
+    transition: opacity 250ms var(--ease-out), transform 250ms var(--ease-out);
+}
+.modal-root:not([data-open]) .modal-backdrop { opacity: 0; }
+.modal-root:not([data-open]) .modal-surface { opacity: 0; transform: scale(0.96); }
+.modal-root[data-open] .modal-backdrop { opacity: 1; }
+.modal-root[data-open] .modal-surface { opacity: 1; transform: scale(1); }
+
+/* ===== 面板切换（tens/天高频 → 仅 160ms 极轻淡入，不做位移花哨） ===== */
+.content-panel { animation: panel-in 160ms var(--ease-out); }
+@keyframes panel-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 开关（toggle）：轨道颜色 150ms ease（滑块位移由 HTML 里的 after:transition-transform 负责） ===== */
+.toggle-track { transition: background-color 150ms ease; }
+
+/* ===== 各账号累计收益条：GPU 属性 scaleX + 精确过渡（替代 width + transition-all） ===== */
+.stats-bar-fill {
+    transform-origin: left;
+    transition: transform 400ms var(--ease-out);
+}
+
+/* ===== 弹窗代理字段禁用态 ===== */
+#settings-proxy-fields { transition: opacity 200ms ease; }
+
+/* ===== 关闭服务遮罩淡入 ===== */
+#shutdown-overlay { animation: fade-in 200ms var(--ease-out); }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ===== 无障碍：减少动态（更少更轻，非归零） ===== */
+@media (prefers-reduced-motion: reduce) {
+    #task-status-ping { animation: none; opacity: 0.5; }
+    .content-panel, #shutdown-overlay { animation: none; }
+    .toggle-track, #settings-proxy-fields { transition: none; }
+    .stats-bar-fill { transition: none; }
+    .modal-root .modal-surface {
+        transform: none !important; /* 去掉位移/缩放，只留 opacity 淡入淡出 */
+        transition: opacity 200ms ease;
+    }
+    .modal-root .modal-backdrop { transition: opacity 200ms ease; }
+}
+
+/* ===== 保存状态 Toast（emil-design-eng：ease-out 进出、GPU 属性、scale(0.97) 起始、图标+颜色区分） ===== */
+#save-toast {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 60; /* 高于弹窗 z-50，任何场景可见 */
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    max-width: 22rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.75rem;
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transform: translateY(12px) scale(0.97); /* 从 0.97 起始，非 scale(0) */
+    pointer-events: none; /* 无可交互元素，不阻挡下层操作 */
+    transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+#save-toast[data-visible] {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+#save-toast .toast-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+}
+#save-toast .toast-icon svg {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+#save-toast .toast-text {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    line-height: 1.25rem;
+}
+/* 成功 / 失败视觉区分：边框 + 圆底图标 */
+#save-toast[data-type="success"] { border-color: #bbf7d0; }
+#save-toast[data-type="success"] .toast-icon { background-color: #dcfce7; color: #16a34a; }
+#save-toast[data-type="error"] { border-color: #fecaca; }
+#save-toast[data-type="error"] .toast-icon { background-color: #fee2e2; color: #dc2626; }
+@media (prefers-reduced-motion: reduce) {
+    #save-toast {
+        transform: none !important; /* 去掉位移/缩放，仅保留 opacity 过渡 */
+        transition: opacity 150ms ease;
+    }
+}
+
+/* ===== 面板顶部间距统一（强制对齐） =====
+ * 顶部安全边距一律由 #contentPanels 的 padding (p-8, 32px) 提供；
+ * 显式清零 .content-panel 的 margin-top，避免任何面板因顺序/可见性/未来改动产生额外间距，
+ * 保证仪表盘 / 账户管理 / 数据统计 / 全局设置四个页面顶部结构完全一致 */
+.content-panel { margin-top: 0; }
+
+/* ===== 账户动态：渐变收益条（蓝系渐变，静态数据指示，不产生位移） ===== */
+.stats-grad-bar {
+    background: linear-gradient(90deg, #93c5fd, #3b82f6, #2563eb);
+}
+
+/* ===== 最新动态状态块（emil-design-eng 规范，2026-08-21） ===== */
+/* ACCOUNT-END 完成块：高对比度边框 + 微渐变背景（静态呈现，不给完成态附加无意义动画） */
+.latest-done {
+    border-color: rgba(0, 120, 212, 0.35);
+    background: linear-gradient(135deg, rgba(0, 120, 212, 0.07), rgba(0, 120, 212, 0.02));
+}
+
+/* 运行中块：box-shadow 呼吸脉冲（仅 transform/opacity 之外的阴影动画；状态指示目的明确——活动进程） */
+.latest-running {
+    border-color: rgba(0, 120, 212, 0.25);
+    background: rgba(0, 120, 212, 0.04);
+    animation: latest-pulse 2s ease-in-out infinite;
+}
+
+@keyframes latest-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 120, 212, 0.14); }
+    50% { box-shadow: 0 0 0 5px rgba(0, 120, 212, 0.05); }
+}
+
+/* ACCOUNT-END 圆角胶囊标签（用户指定样式） */
+.account-end-pill {
+    display: inline-flex;
+    align-items: center;
+    background: #F3F2F1;
+    border: 1px solid #E1DFDD;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #0078D4;
+    white-space: nowrap;
+}
+
+/* 关键字段：加粗 + 主色 #0078D4（积分变化、总运行时间） */
+.key-point {
+    font-weight: 700;
+    color: #0078D4;
+}
+
+/* 减少动态：移除运行中脉冲（保留颜色/边框，供状态理解） */
+@media (prefers-reduced-motion: reduce) {
+    .latest-running {
+        animation: none;
+    }
+}

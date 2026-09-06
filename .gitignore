@@ -20,3 +20,23 @@ note
 # 本地私密配置与编辑器工作目录，严禁提交
 /.env
 /.zcode/
+
+# ===== GUI 运行时生成物/本地测试数据（不纳入版本库） =====
+gui/summary.json
+gui/gui-settings.json
+gui/cache/
+.gui.pid
+gui-data-*/
+test/data/
+
+# ===== Agent Teams 插件运行时状态（非仓库内容） =====
+.agent-teams/
+
+# ===== 临时文件 =====
+*.bak
+*.bak.*
+*.tmp
+*.temp
+.npm-tmp-cache/
+Thumbs.db
+Desktop.ini

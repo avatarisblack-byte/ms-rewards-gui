@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microsoft Rewards Script 控制台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/animations.css">
+</head>
+<body class="bg-gray-50 h-screen flex overflow-hidden text-gray-800">
+
+    <!-- 左侧导航 -->
+    <aside class="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col p-4 space-y-2 z-10">
+        <!-- 优化的 Logo 排版 -->
+        <div class="mb-8 mt-2 flex items-center gap-3 px-2">
+            <div class="bg-blue-600 p-2 rounded-xl shadow-sm shadow-blue-200 flex-shrink-0">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <div class="leading-tight min-w-0">
+                <div class="text-base font-extrabold text-gray-900 tracking-tight truncate">Microsoft Rewards</div>
+                <div class="text-[11px] font-bold text-blue-600 tracking-widest uppercase mt-0.5 truncate">Script Console</div>
+            </div>
+        </div>
+
+        <nav class="flex-1 space-y-1.5" id="nav">
+            <a href="#home" class="nav-item flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors active-nav-item bg-blue-50 !text-blue-700 font-medium" data-tab="home">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                仪表盘总览
+            </a>
+            <a href="#accounts" class="nav-item flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors font-medium" data-tab="accounts">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                账号管理
+            </a>
+            <a href="#stats" class="nav-item flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors font-medium" data-tab="stats">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10a2 2 0 01-2 2h-2a2 2 0 01-2-2zm0 0H9m9 0v-6a2 2 0 00-2-2h-2a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2z"></path></svg>
+                数据统计
+            </a>
+            <a href="#settings" class="nav-item flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors font-medium" data-tab="settings">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                全局设置
+            </a>
+        </nav>
+        <!-- 底部状态控制区（原顶部常驻栏迁移：状态指示灯 → 启动/停止任务 → 关闭服务，垂直排列、按钮撑满宽度） -->
+        <div class="mt-4 pt-4 border-t border-gray-100 space-y-3">
+            <div class="flex items-center justify-center gap-2 px-2">
+                <span id="task-status-dot-wrap" class="flex h-3 w-3 relative">
+                    <!-- 空闲时静止（无 animate-ping + opacity-0），运行中由 setTaskUI 恢复涟漪动画 -->
+                    <span id="task-status-ping" class="absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-0"></span>
+                    <span id="task-status-dot" class="relative inline-flex rounded-full h-3 w-3 bg-gray-400"></span>
+                </span>
+                <span id="task-status-text" class="text-sm font-medium text-gray-600">脚本空闲中</span>
+            </div>
+            <button id="task-start-btn" onclick="taskStart()" class="btn btn-dark w-full">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                启动任务
+            </button>
+            <button id="task-stop-btn" onclick="taskStop()" class="hidden btn btn-danger w-full">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                停止任务
+            </button>
+            <button onclick="shutdownServer()" class="btn btn-danger-ghost w-full" title="停止服务并退出">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                关闭服务
+            </button>
+        </div>
+        <div class="mt-2">
+            <button onclick="setupEnvironment()" class="btn btn-secondary w-full" title="运行根目录 setup 程序（安装依赖 / 构建环境）">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                安装环境
+            </button>
+        </div>
+        <div class="p-4 mt-2 text-xs text-gray-400 text-center">
+            v2.1.0-GUI
+        </div>
+    </aside>
+
+    <!-- 右侧内容 -->
+    <main class="flex-1 min-w-0 flex flex-col h-full bg-gray-50/50">
+
+        <!-- 内容区域容器：顶部间距统一由 p-8 (32px) 提供；不使用 space-y-*（其选择器仅作用于"非首个可见兄弟"，
+             会因面板顺序/可见性变化导致首个面板与其他面板间距不一致，历史上多次引发回归） -->
+        <div class="flex-1 overflow-y-auto p-8" id="contentPanels">
+            
+            <!-- 【面板 1：Home 标签页】 -->
+            <!-- 外层结构与 panel-accounts 完全一致：content-panel space-y-6 + 顶部标题区 flex justify-between items-end -->
+            <div id="panel-home" class="content-panel space-y-6">
+                <div class="flex flex-wrap justify-between items-center min-h-[56px] gap-3">
+                    <div class="min-w-0">
+                        <h2 class="text-lg font-bold text-gray-800">仪表盘总览</h2>
+                        <p class="text-sm text-gray-500">账户汇总与任务运行状态</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="data-export-btn" onclick="exportAllData()" class="btn btn-secondary" title="导出全部本地数据（Session/日志/配置/账号）">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            导出数据
+                        </button>
+                        <button id="data-import-btn" onclick="document.getElementById('data-zip-input').click()" class="btn btn-secondary" title="从备份 zip 恢复全部本地数据">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 12m4 4V4"></path></svg>
+                            导入数据
+                        </button>
+                        <input id="data-zip-input" type="file" accept=".zip" class="hidden" onchange="importAllData(this)">
+                    </div>
+                </div>
+
+                <!-- Home 顶部汇总统计卡片（grid 响应式，与 panel-stats 顶部卡片一致） -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow space-y-4 min-w-0">
+                        <p class="text-sm font-bold text-gray-500 uppercase tracking-widest">账户总数</p>
+                        <p class="text-3xl font-extrabold text-gray-900 break-all" id="home-total-accounts">-</p>
+                        <p class="text-xs text-gray-400" id="home-total-accounts-sub">正在加载...</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow space-y-4 min-w-0">
+                        <p class="text-sm font-bold text-gray-500 uppercase tracking-widest">今日收益 / 总收益</p>
+                        <p class="text-3xl font-extrabold text-blue-600 break-all">
+                            <span id="home-total-collected">-</span>
+                            <span class="text-xl text-gray-400 font-medium">/</span>
+                            <span id="home-total-balance" class="text-green-500">-</span>
+                            <span class="text-lg text-gray-400 font-medium">pts</span>
+                        </p>
+                        <p class="text-xs text-gray-400" id="home-total-balance-sub">脚本累计收益（基于日志解析）</p>
+                    </div>
+                </div>
+
+                <!-- 任务实时日志（2026-08-21 布局重构）：置于「全局摘要 → 实时日志 → 账号列表」动线中部，
+                     上方为账户总数/今日收益汇总卡，下方为首个账号详情块 -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow">
+                    <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+                        <h3 class="text-base font-bold text-gray-800">任务实时日志</h3>
+                        <span class="text-xs text-gray-400">子进程 stdout/stderr 实时输出</span>
+                    </div>
+                    <div id="task-log-box" class="bg-gray-50 rounded-xl border border-gray-100 p-3 h-48 overflow-y-auto font-mono space-y-0.5">
+                        <p class="text-gray-400 text-xs">暂无任务日志。点击"启动任务"开始运行。</p>
+                    </div>
+                </div>
+
+                <!-- Home 面板账号卡片（动态渲染，纵向堆叠与 panel-accounts 的 accounts-list 的 space-y-4 一致） -->
+                <div id="home-account-cards" class="space-y-4"></div>
+            </div>
+
+            <!-- 【面板 2：Accounts 标签页】 -->
+            <div id="panel-accounts" class="content-panel space-y-6 hidden">
+                <div class="flex flex-wrap justify-between items-center min-h-[56px] gap-3">
+                    <div class="min-w-0">
+                        <h2 class="text-lg font-bold text-gray-800">账户列表</h2>
+                        <p class="text-sm text-gray-500">管理您的凭证与独立代理设置</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="session-export-btn" onclick="exportSessions()" class="btn btn-secondary">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            导出 Session
+                        </button>
+                        <button id="session-import-btn" onclick="document.getElementById('session-zip-input').click()" class="btn btn-secondary">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 12m4 4V4"></path></svg>
+                            导入 Session
+                        </button>
+                        <button onclick="openModal('modal-add-account')" class="btn btn-primary">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            添加账户
+                        </button>
+                        <input id="session-zip-input" type="file" accept=".zip" class="hidden" onchange="importSessionFile(this)">
+                    </div>
+                </div>
+
+                <!-- 账号卡片（动态渲染，真实数据来自 /api/accounts） -->
+                <div id="accounts-list" class="space-y-4">
+                    <div class="bg-white p-5 rounded-2xl border border-gray-100 card-shadow flex items-center justify-center py-10 text-gray-400">
+                        正在加载账号列表...
+                    </div>
+                </div>
+                <!-- 空状态 -->
+                <div id="accounts-empty" class="hidden bg-white p-12 rounded-2xl border border-gray-100 card-shadow text-center">
+                    <svg class="w-14 h-14 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    <p class="text-gray-500 font-medium">暂无账号</p>
+                    <p class="text-sm text-gray-400 mt-1">点击右上角“添加账户”开始配置</p>
+                </div>
+            </div>
+
+            <!-- 【面板 3：Stats 标签页】 -->
+            <div id="panel-stats" class="content-panel space-y-6 hidden">
+                <div class="flex flex-wrap justify-between items-center min-h-[56px] gap-3">
+                    <div class="min-w-0">
+                        <h2 class="text-lg font-bold text-gray-800">数据统计</h2>
+                        <p class="text-sm text-gray-500">基于 logs/ 目录日志的积分统计</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="logs-export-btn" onclick="exportLogs()" class="btn btn-secondary">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            导出日志
+                        </button>
+                        <button id="logs-import-btn" onclick="document.getElementById('logs-zip-input').click()" class="btn btn-secondary">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 12m4 4V4"></path></svg>
+                            导入日志
+                        </button>
+                        <input id="logs-zip-input" type="file" accept=".zip" class="hidden" onchange="importLogs(this)">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow space-y-2">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">历史总收益</p>
+                        <p class="text-3xl font-extrabold text-blue-600" id="stats-grand-total">-</p>
+                        <p class="text-xs text-gray-400" id="stats-stats-info">解析中...</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow space-y-2">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">今日收益</p>
+                        <p class="text-3xl font-extrabold text-green-500" id="stats-today-points">-</p>
+                        <p class="text-xs text-gray-400">今日脚本收益（多账号/多次运行累计）</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow space-y-2">
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">累计活跃天数</p>
+                        <p class="text-3xl font-extrabold text-gray-900" id="stats-active-days">-</p>
+                        <p class="text-xs text-gray-400">日志覆盖的日期数</p>
+                    </div>
+                </div>
+
+                <!-- 每日积分趋势 Chart.js 折线图 -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow">
+                    <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+                        <h3 class="text-base font-bold text-gray-800">每日积分趋势（Stacked 堆叠柱/线图）</h3>
+                        <span class="text-xs text-gray-400" id="stats-chart-sub">基于 logs/ 日志实时解析</span>
+                    </div>
+                    <div class="relative h-72">
+                        <canvas id="stats-trend-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 各账号累计统计 -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow">
+                    <h3 class="text-base font-bold text-gray-800 mb-4">各账号累计收益</h3>
+                    <div id="stats-account-bars" class="space-y-3"></div>
+                </div>
+            </div>
+
+            <!-- 【面板 4：Settings 标签页 (Global Config)】 -->
+            <div id="panel-settings" class="content-panel space-y-6 hidden pb-10">
+                <div class="flex flex-wrap justify-between items-center min-h-[56px] gap-3">
+                    <div class="min-w-0">
+                        <h2 class="text-lg font-bold text-gray-800">全局设置</h2>
+                        <p class="text-sm text-gray-500">全局脚本运行参数与任务开关（修改后将在下次启动任务时生效）</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="config-open-btn" onclick="openConfigFile()" class="btn btn-secondary" title="用系统默认程序打开实际 config 文件">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                            打开配置文件
+                        </button>
+                        <button onclick="resetConfig()" class="btn btn-danger-ghost" title="将所有设置恢复为 config.example.json 默认值">
+                            重置默认
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 模块 1: 基础参数 -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow">
+                    <h3 class="text-base font-bold text-gray-800 mb-5 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                        基础与运行参数
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Base URL (基础地址)</label>
+                            <input id="cfg-baseURL" type="text" value="https://rewards.bing.com" readonly class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500" title="基础地址为高风险字段，如需修改请直接编辑 config.json">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1.5">全局超时时间 (Global Timeout)</label>
+                            <input id="cfg-globalTimeout" type="text" value="50sec" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1.5">GUI 本地端口 (Port)</label>
+                            <input id="gui-port-input" type="number" min="1024" max="65535" step="1" placeholder="3000" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors duration-150">
+                            <p class="text-xs text-gray-400 mt-1">范围 1024-65535；修改后立即保存，重启 GUI 后生效</p>
+                        </div>
+                        <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                            <div>
+                                <p class="font-semibold text-sm text-gray-800">无头模式 (Headless)</p>
+                                <p class="text-xs text-gray-500">后台静默运行浏览器不显示界面</p>
+                            </div>
+                            <!-- Tailwind 开关组件 -->
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="cfg-headless" type="checkbox" class="sr-only peer">
+                                <div class="toggle-track w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200 after:ease-out peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                            <div>
+                                <p class="font-semibold text-sm text-gray-800">连续签到保护 (Streak Protection)</p>
+                                <p class="text-xs text-gray-500">失败时强制停止以防断签</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="cfg-ensureStreakProtection" type="checkbox" class="sr-only peer" checked>
+                                <div class="toggle-track w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200 after:ease-out peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                            <div>
+                                <p class="font-semibold text-sm text-gray-800">错误诊断 (Error Diagnostics)</p>
+                                <p class="text-xs text-gray-500">记录运行错误诊断信息</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="cfg-errorDiagnostics" type="checkbox" class="sr-only peer">
+                                <div class="toggle-track w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200 after:ease-out peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                            <div>
+                                <p class="font-semibold text-sm text-gray-800">调试日志 (Debug Logs)</p>
+                                <p class="text-xs text-gray-500">输出 DEBUG 级别详细日志</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="cfg-debugLogs" type="checkbox" class="sr-only peer" checked>
+                                <div class="toggle-track w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200 after:ease-out peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                            <div>
+                                <p class="font-semibold text-sm text-gray-800">本地搜索 (Bing Local)</p>
+                                <p class="text-xs text-gray-500">启用 bing.com 本地化查询引擎</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="cfg-searchOnBingLocalQueries" type="checkbox" class="sr-only peer">
+                                <div class="toggle-track w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200 after:ease-out peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                            <div>
+                                <p class="font-semibold text-sm text-gray-800">查询引擎代理 (Query Engine Proxy)</p>
+                                <p class="text-xs text-gray-500">为搜索查询引擎启用代理</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="cfg-proxy-queryEngine" type="checkbox" class="sr-only peer">
+                                <div class="toggle-track w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200 after:ease-out peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between py-2 border-b border-gray-50">
+                            <div>
+                                <p class="font-semibold text-sm text-gray-800">控制台日志过滤 (Console Log Filter)</p>
+                                <p class="text-xs text-gray-500">过滤控制台输出日志</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input id="cfg-consoleLogFilter-enabled" type="checkbox" class="sr-only peer">
+                                <div class="toggle-track w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200 after:ease-out peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模块 2: 任务开关 (根据图片优化) -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow">
+                    <h3 class="text-base font-bold text-gray-800 mb-5 flex items-center gap-2 border-b border-gray-100 pb-3">
+                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                        任务开关 (Workers Toggle)
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-4 gap-x-6">
+                        <!-- 第一行 -->
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doDailySet" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">每日任务 (doDailySet)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doClaimBonusPoints" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">额外奖励 (ClaimBonus)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doSpecialPromotions" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">特别活动 (SpecialPromo)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doMorePromotions" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">更多活动 (MorePromo)</span>
+                        </label>
+
+                        <!-- 第二行 -->
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doPunchCards" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">集点卡 (doPunchCards)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doAppPromotions" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">App任务 (AppPromo)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doDesktopSearch" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">桌面搜索 (DesktopSearch)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doMobileSearch" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">移动搜索 (MobileSearch)</span>
+                        </label>
+
+                        <!-- 第三行 -->
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doDailyCheckIn" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">每日签到 (DailyCheckIn)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doReadToEarn" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">阅读奖励 (ReadToEarn)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 模块 3: 搜索与延迟配置 -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-100 card-shadow">
+                    <h3 class="text-base font-bold text-gray-800 mb-5 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        搜索行为与模拟延迟 (Search Settings)
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">随机滚动网页 (Scroll Random)</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input id="cfg-scrollRandomResults" type="checkbox" class="sr-only peer" checked>
+                                    <div class="toggle-track w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform after:duration-200 after:ease-out peer-checked:after:translate-x-full"></div>
+                                </label>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">点击随机结果 (Click Random)</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input id="cfg-clickRandomResults" type="checkbox" class="sr-only peer" checked>
+                                    <div class="toggle-track w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform after:duration-200 after:ease-out peer-checked:after:translate-x-full"></div>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="space-y-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">中国区 API Key (China API Appkey)</label>
+                                <input id="cfg-chinaApi-appkey" type="text" value="" placeholder="留空则使用默认查询引擎" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">搜索间隔时间 (Search Delay)</label>
+                                <div class="flex items-center gap-2">
+                                    <input id="cfg-searchDelayMin" type="text" value="6min" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-center">
+                                    <span class="text-gray-400">至</span>
+                                    <input id="cfg-searchDelayMax" type="text" value="12min" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-center">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">阅读文章延迟 (Read Delay)</label>
+                                <div class="flex items-center gap-2">
+                                    <input id="cfg-readDelayMin" type="text" value="6min" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-center">
+                                    <span class="text-gray-400">至</span>
+                                    <input id="cfg-readDelayMax" type="text" value="11min" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-center">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 mb-1">网页停留时间 (Visit Time)</label>
+                                <input id="cfg-searchResultVisitTime" type="text" value="20sec" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 只读配置（不建议在此修改） -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-200 card-shadow border-dashed">
+                    <h3 class="text-base font-bold text-gray-800 mb-5 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        只读配置（不建议在此修改）
+                    </h3>
+                    <p class="text-xs text-gray-400 mb-4">以下选项涉及运行关键路径或复杂结构，如需调整请点击上方"打开配置文件"手动编辑。</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 mb-1">Session 目录 (sessionPath)</label>
+                            <input id="ro-sessionPath" type="text" readonly class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 mb-1">并行集群数 (clusters)</label>
+                            <input id="ro-clusters" type="text" readonly class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 mb-1">查询引擎数组 (queryEngines)</label>
+                            <input id="ro-queryEngines" type="text" readonly class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 mb-1">并行搜索 (parallelSearching, 已锁定)</label>
+                            <input id="ro-parallelSearching" type="text" readonly value="false (高风险，已锁定)" class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500">
+                        </div>
+                        <div class="col-span-1 md:col-span-2">
+                            <label class="block text-xs font-semibold text-gray-500 mb-1">控制台日志过滤详情 (consoleLogFilter)</label>
+                            <input id="ro-consoleLogFilter" type="text" readonly class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500">
+                        </div>
+                        <div class="col-span-1 md:col-span-2">
+                            <label class="block text-xs font-semibold text-gray-500 mb-1">Webhook 通知 (webhook)</label>
+                            <input id="ro-webhook" type="text" readonly class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ================= 弹窗组件 (Modals) ================= -->
+
+    <!-- 1. 添加账户弹窗 (Add Account Modal) -->
+    <div id="modal-add-account" class="modal-root fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeModal('modal-add-account')"></div>
+        
+        <div class="modal-surface relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                    添加新账户
+                </h3>
+                <button onclick="closeModal('modal-add-account')" class="text-gray-400 hover:text-gray-600 p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto space-y-5">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">登录邮箱 <span class="text-red-500">*</span></label>
+                        <input id="add-account-email" type="email" placeholder="example@outlook.com" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">密码 <span class="text-red-500">*</span></label>
+                        <input id="add-account-password" type="password" placeholder="••••••••••••" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    
+                    <details class="group border border-gray-200 rounded-lg bg-gray-50">
+                        <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-3 text-sm text-gray-700">
+                            <span>更多安全与辅助选项 (可选)</span>
+                            <span class="transition group-open:rotate-180">
+                                <svg fill="none" height="24" shape-rendering="geometricPrecision" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                            </span>
+                        </summary>
+                        <div class="p-4 pt-1 border-t border-gray-200 text-gray-600 space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">TOTP 2FA 密钥 (Secret)</label>
+                                <input id="add-account-totp" type="text" placeholder="JBSWY3DPEHPK3PXP" class="w-full border border-gray-300 rounded-md p-2 text-sm bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">恢复辅助邮箱 (Recovery Email)</label>
+                                <input id="add-account-recovery" type="email" placeholder="backup@gmail.com" class="w-full border border-gray-300 rounded-md p-2 text-sm bg-white">
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                <button onclick="closeModal('modal-add-account')" class="btn btn-ghost">取消</button>
+                <button onclick="submitAddAccount()" class="btn btn-primary">确认添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 账户详细设置弹窗 (Account Settings Modal) -->
+    <div id="modal-account-settings" class="modal-root fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeModal('modal-account-settings')"></div>
+        
+        <div class="modal-surface relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">⚙️ 账户专属配置</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">user1@example.com</p>
+                </div>
+                <button onclick="closeModal('modal-account-settings')" class="text-gray-400 hover:text-gray-600 p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto space-y-8">
+                <!-- 区块 1：语言与指纹 -->
+                <div>
+                    <h4 class="text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide border-b border-gray-100 pb-1">地理与伪装 (Locale & Fingerprint)</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">国家/地区定位 (geoLocale)</label>
+                            <select id="settings-geoLocale" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                                <option value="auto">auto (自动)</option>
+                                <option value="us">US (美国)</option>
+                                <option value="gb">GB (英国)</option>
+                                <option value="cn">CN (中国)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 mb-1">语言代码 (langCode)</label>
+                            <input id="settings-langCode" type="text" value="zh" class="w-full border border-gray-300 rounded-md p-2 text-sm">
+                        </div>
+                        <div class="col-span-2 flex gap-6 mt-2">
+                            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                <input id="settings-fp-desktop" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                                <span>保留桌面端指纹</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                <input id="settings-fp-mobile" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                                <span>保留移动端指纹</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 区块 2：专属代理 -->
+                <div>
+                    <h4 class="text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide border-b border-gray-100 pb-1">专属网络代理 (Proxy)</h4>
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">为此账号启用独立代理 (proxyAxios)</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input id="settings-proxy-enabled" type="checkbox" class="sr-only peer" onchange="applyProxyFieldsVisibility()">
+                                <div class="toggle-track w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform after:duration-200 after:ease-out peer-checked:after:translate-x-full"></div>
+                            </label>
+                        </div>
+                        <div id="settings-proxy-fields" class="grid grid-cols-3 gap-3 opacity-50 pointer-events-none">
+                            <div class="col-span-2">
+                                <label class="block text-xs text-gray-500 mb-1">代理地址 (URL)</label>
+                                <input id="settings-proxy-url" type="text" placeholder="http://127.0.0.1" class="w-full border border-gray-300 rounded p-1.5 text-sm bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">端口 (Port)</label>
+                                <input id="settings-proxy-port" type="number" placeholder="7890" class="w-full border border-gray-300 rounded p-1.5 text-sm bg-white">
+                            </div>
+                            <div class="col-span-1">
+                                <label class="block text-xs text-gray-500 mb-1">账号 (User)</label>
+                                <input id="settings-proxy-username" type="text" class="w-full border border-gray-300 rounded p-1.5 text-sm bg-white">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-xs text-gray-500 mb-1">密码 (Pass)</label>
+                                <input id="settings-proxy-password" type="password" class="w-full border border-gray-300 rounded p-1.5 text-sm bg-white">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                <button onclick="closeModal('modal-account-settings')" class="btn btn-ghost">取消</button>
+                <button onclick="saveAccountSettings()" class="btn btn-primary">保存更新</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 首次打开：环境安装提示弹窗（localStorage 持久化"不再提示"，勾选后不再弹出） -->
+    <div id="modal-env-setup" class="modal-root fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onclick="closeModal('modal-env-setup')"></div>
+
+        <div class="modal-surface relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    环境安装提示
+                </h3>
+                <button onclick="closeModal('modal-env-setup')" class="text-gray-400 hover:text-gray-600 p-1" aria-label="关闭">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="p-6 flex flex-col items-center text-center">
+                <div class="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mb-4">
+                    <svg class="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z"></path></svg>
+                </div>
+                <p class="text-sm text-gray-600">请先安装环境，再执行其他操作</p>
+            </div>
+
+            <div class="px-6 pb-6 flex justify-center">
+                <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                    <input id="env-setup-dismiss" type="checkbox" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                    不再提示
+                </label>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                <button onclick="closeModal('modal-env-setup')" class="btn btn-primary">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 服务已关闭遮罩（window.close 被浏览器拦截时兜底展示） -->
+    <div id="shutdown-overlay" class="hidden fixed inset-0 z-[999] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm mx-4">
+            <div class="w-14 h-14 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <svg class="w-7 h-7 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">服务已关闭</h3>
+            <p class="text-sm text-gray-500 mt-2">Node 服务已停止。<br>如需再次使用，请重新运行 start-gui.bat。</p>
+            <button onclick="location.reload()" class="btn btn-primary mt-5">重新加载</button>
+        </div>
+    </div>
+
+    <!-- 保存状态 Toast（统一反馈组件：图标 + 颜色区分成功/失败，右下角浮动，2.5s 自动消失） -->
+    <div id="save-toast" role="status" aria-live="polite">
+        <span class="toast-icon"></span>
+        <span class="toast-text"></span>
+    </div>
+
+    <!-- 交互脚本 -->
+    <script src="js/animator.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
