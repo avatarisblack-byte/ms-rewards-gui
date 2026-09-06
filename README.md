@@ -2,7 +2,7 @@
 
 # 微软奖励脚本（GUI 版）
 
-[![Version](https://img.shields.io/badge/version-3.1.6.4-blue.svg)](./package.json)
+[![Version](https://img.shields.io/badge/version-4.3.2-blue.svg)](./package.json)
 [![GUI](https://img.shields.io/badge/GUI-v2.1.0-green.svg)](./gui/design-reference.html)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-green.svg)](./package.json)

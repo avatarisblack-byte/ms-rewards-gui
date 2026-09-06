@@ -6,7 +6,7 @@
 
 | 模块 | 说明 |
 |------|------|
-| `src/` | 主脚本（TypeScript v3.1.6.4）：Microsoft Rewards 积分自动化（patchright 浏览器 + 指纹注入 + Cheerio 解析 + 多进程集群） |
+| `src/` | 主脚本（TypeScript v4.3.2，gui-v4-api 分支起基于 upstream/V4-china）：Microsoft Rewards 积分自动化（patchright 浏览器 + 指纹注入 + impit 请求 + 多进程集群）；`scripts/api/` 为上游内置 Control API（零依赖 HTTP：进程管理/SSE 日志/配置/会话，默认端口 3010，`npm run api`） |
 | `gui/` | 控制面板（零依赖 Node 服务 + 原生前端）：浏览器可视化管理账号/配置/统计/任务 |
 | `scripts/` | 运维脚本：Docker 容器、macOS 启动、浏览器 Session 管理 CLI |
 | `test/` | 测试：①日志解析与统计的交叉对拍测试；②GUI 全链路自动化测试（单元/接口/容错，`node:test` 零依赖 + tmp 沙箱隔离） |
@@ -28,16 +28,17 @@
 | `gui/lib/logger.js` | parseLogLine / listLogFiles / readLogFile（2026-08-18 新增）；parseLogLine 解析前剥离行尾 `\r`（JS 正则的 `.` 不匹配 `\r`，CRLF 日志会被整行丢弃导致统计归零），readLogFile 以 `YYYY-MM-DD` 白名单校验并自动补 `.log` 后缀（原先按日期查询恒返回空，且 dateStr 可穿越目录）（2026-08-20 修复） |
 | `gui/lib/summary.js` | summarizeLogs / summarizeAllLogs / generateSummary / writeSummaryFile；收益口径：ACCOUNT-END 累加 + 本地时区日期键 + todayTotal（2026-08-18/19 新增）；summarizeLogs 取 `e.message \|\| ''` 后再匹配，残缺条目不再抛 TypeError（2026-08-20 加固）；generateSummary 按「运行段」聚合（2026-08-22 修复）：ACCOUNT-START 为段边界，段内有 ACCOUNT-END 用 END 权威总计、无 END 用段内活动积分兜底，段收益归属段结束日——修复同一天多次运行（脚本重启/中断续跑）时仅取最后一次 ACCOUNT-END、丢弃被截断运行收益的漏算（实测 guidata 漏 255 分，grandTotal 2050→2305）；新增 run 级事件黑名单 `RUN_LEVEL_EVENTS` + `isRunLevelEvent`，`summarizeLogs`/`generateSummary` 双处按 event 跳过（2026-08-23 修复）：上游 RUN-END 行 [账户] 字段被动态 userName 污染成末尾账号名，仅按 account 过滤会覆盖末尾账号 lastEvent 并在跨天运行时污染收益段归属 |
 | `gui/lib/archive.js` | unzipToDir / zipDir / makeTmpRoot（PowerShell/unzip 跨平台零依赖压缩解压）（2026-08-18 新增）；makeTmpRoot 改用 `fs.mkdtempSync`（原 `Date.now()+pid` 拼接在同毫秒并发下会撞同一目录，导入/导出互相覆盖 zip 并删对方目录）（2026-08-20 修复）；PowerShell 命令不再把路径拼进 `-Command` 字符串，改经环境变量传递（路径含单引号会中断命令或构成注入）（2026-08-21 加固） |
-| `gui/lib/taskManager.js` | startTask / stopTask / getTaskStatus（子进程 spawn node dist/index.js，SIGTERM→10s SIGKILL 兜底，500 行环形日志缓冲）（2026-08-18 新增）；运行判定改用 `exitCode/signalCode`（`killed` 仅表示信号已发出，SIGTERM 后进程最多再存活 10s），启动加 `starting` 互斥 + 3s 节流，避免并发请求/重复点击先后拉起多个脚本进程（2026-08-20 加固） |
+| `gui/lib/apiBridge.js` | 上游 Control API 桥接（2026-09-06 新增，取代 taskManager）：ensureApi（/health 探测 + 惰性 spawn `node scripts/api/server.js`，env 注入 API_HOST/API_PORT）→ startTask（POST /start，409 转中文错误）/ stopTask（POST /stop）/ getTaskStatus（GET /status + /logs?limit=100，映射为 v3 契约 `{running,pid,startedAt,log:[{time,line}]}`）；GUI 退出钩子 shutdownBridge 收尾自己拉起的子进程；`GUI_API_BRIDGE=off` 全部走降级分支（测试沙箱隔离）；端口优先级 `GUI_API_PORT` env > gui-settings.json `apiPort` > 3010 |
+| ~~`gui/lib/taskManager.js`~~ | （已删除，2026-09-06 方案 C：子进程 spawn/kill/节流状态机不再维护，进程管理统一交给上游 scripts/api/processManager.js；历史实现见 git 历史 gui-config-editor 分支） |
 | `gui/lib/logCache.js` | 日志摘要缓存：getCachedData / generateCache / isCacheFresh / invalidateCache，缓存文件 `gui/cache/account-summary.json`；用「文件名+大小+mtime」集合快照判定新鲜度（导入的 zip 解压会保留旧 mtime，单一"最新 mtime"判定会漏掉新导入日志），tmp+rename 原子写入；读取/重建异常降级为空摘要（缓存是性能优化，不应成为可用性单点）（2026-08-19 新增 / 2026-08-20 补异常兜底）；generateCache 后惰性清理 7 天前残留缓存文件（2026-08-21） |
 | `gui/lib/cleanup.js` | 备份轮转与缓存清理（2026-08-21 新增）：`rotateBackup` 把旧 `.bak` 轮转为 `.bak.<UTC时间戳>` 并每类保留最近 5 个（固定 `.bak` 会被每次写入覆盖、无轮转会无限堆积）；`pruneOldCache` 删除缓存目录 7 天前文件。清理/轮转失败仅告警，绝不影响主流程 |
 | `gui/lib/routes/static.js` | 静态页 + `/css/*` `/js/*` 分发（防路径穿越黑名单）（2026-08-18 新增） |
-| `gui/lib/routes/config.js` | 配置 CRUD：GET/PUT `/api/config`、POST `/api/config/reset`、POST `/api/config/open`（2026-08-18 新增）；合并写回时对 `current.searchSettings` 做空值保护（缺该键时读 `.chinaApi` 会抛 TypeError 使保存整体失败）（2026-08-20 修复）；顶层字段改白名单校验（`ALLOWED_TOP_LEVEL`，来源 src/config.example.json 的 14 个顶层键，新增配置项需同步），未知字段返回 400 而非落盘污染 config.json（2026-08-20 加固）；PUT 加模块级写互斥锁 `isWriting`：写入期间到达的并发请求返回 409「系统正忙，请稍后重试」，`finally` 释放锁；readBody 后 `setImmediate` 让出事件循环，保证同一批并发请求先完成锁检查（本地回环小请求体同包缓冲时若不让出，前一请求会在后一请求回调前完成并释放锁，锁形同虚设）（2026-08-21 修复）；备份前调用 `cleanup.rotateBackup` 轮转历史备份（保留最近 5 个，2026-08-21） |
+| `gui/lib/routes/config.js` | 配置 CRUD：GET/PUT `/api/config`、POST `/api/config/reset`、POST `/api/config/open`（2026-08-18 新增）；合并写回时对 `current.searchSettings` 做空值保护（缺该键时读 `.chinaApi` 会抛 TypeError 使保存整体失败）（2026-08-20 修复）；顶层字段改白名单校验（`ALLOWED_TOP_LEVEL`，2026-09-06 起对齐 v4 config.example.json 的 19 个顶层键：新增 accountDelay/activities/experimental/autoClaimPunchcardRewards/contintueOnBotWarning/skipNonPointTasks，移除 baseURL；新增配置项需同步），未知字段返回 400 而非落盘污染 config.json（2026-08-20 加固）；PUT 加模块级写互斥锁 `isWriting`：写入期间到达的并发请求返回 409「系统正忙，请稍后重试」，`finally` 释放锁；readBody 后 `setImmediate` 让出事件循环，保证同一批并发请求先完成锁检查（本地回环小请求体同包缓冲时若不让出，前一请求会在后一请求回调前完成并释放锁，锁形同虚设）（2026-08-21 修复）；备份前调用 `cleanup.rotateBackup` 轮转历史备份（保留最近 5 个，2026-08-21） |
 | `gui/lib/routes/accounts.js` | 账号 CRUD：GET/POST `/api/accounts`、PUT/DELETE `/api/accounts/:email`（.bak 备份+回滚）（2026-08-18 新增）；GET 分支校验数组结构与 email 类型，避免脏 accounts.json 触发 TypeError 终止进程（2026-08-20 加固）；GET 对 `password`/`totpSecret` 脱敏为 `******`（原先原样下发全部账号凭据）；PUT 把回传的脱敏占位符视为「未修改」剔除，防止前端编辑其他字段时把占位符覆盖写入真实凭据（2026-08-21 安全加固）；备份前调用 `cleanup.rotateBackup` 轮转历史备份（2026-08-21） |
 | `gui/lib/routes/logs.js` | 日志：GET `/api/logs`、导出/导入 zip、GET `/api/logs/:date`、GET `/api/logs/summary`（2026-08-18 新增）；GET `/api/logs` 校验 req.method 返回 405（2026-08-20 加固）；`/api/logs/summary` 与 `/api/logs/:date` 补同款方法校验（同类未动项）；导出分支移除残留的 `Access-Control-Allow-Origin: *`（CORS 加固收尾）（2026-08-21） |
 | `gui/lib/routes/sessions.js` | Session zip 导入/导出（白名单 session_*.json + 防穿越 + .bak）（2026-08-18 新增） |
 | `gui/lib/routes/data.js` | 一键数据导入/导出（sessions+logs+accounts.json+config.json 打包恢复）（2026-08-18 新增） |
-| `gui/lib/routes/tasks.js` | 任务：POST `/api/start`、POST `/api/stop`、GET `/api/task`（2026-08-18 新增）；三个接口均校验 req.method 并对非法方法返回 405（原先仅判断 pathname，GET 即可启停脚本子进程）（2026-08-20 加固） |
+| `gui/lib/routes/tasks.js` | 任务：POST `/api/start`、POST `/api/stop`、GET `/api/task`（2026-08-18 新增）；三个接口均校验 req.method 并对非法方法返回 405（2026-08-20 加固）；2026-09-06 起改为 async 调 lib/apiBridge.js 转发上游 Control API，路由本身不再管理子进程，响应格式保持 v3 契约 `{success,message/error}` 与 `{running,pid,startedAt,log}` 不变 |
 | `gui/lib/routes/system.js` | 系统：POST `/api/shutdown`、GET `/api/stats`/`/api/summary`、GET `/api/keepalive`（SSE 保活）、POST `/api/setup`（2026-08-18 新增）；三个读接口校验 req.method 返回 405（2026-08-20 加固）；`/api/setup` spawn `setup.bat` 前注入剔除 `allow-scripts` 的干净 `NPM_CONFIG_USERCONFIG`，规避用户级 `.npmrc` 的 allow-scripts 在 npm 11.17 嵌套安装下的 EALLOWSCRIPTS，不改动上游非 GUI 文件（2026-08-21）；**服务常驻改造（2026-08-23）**——删除「所有保活连接断开后 5s 静默期自杀（process.exit）」逻辑，keepalive 断开仅记日志「所有页面已断开保活连接，服务继续常驻运行」，停止方式仅剩 `/api/shutdown`/`stop-gui.bat`/Ctrl+C（根因：Edge 睡眠标签页冻结后台页面使 SSE 断开且页面无法重连，静默期走完服务被"清掉"且静默模式无感知） |
 | `gui/start-gui.bat` | 一键启动（常规模式）：**纯 ASCII（无中文，避免任何代码页乱码）**：`cd /d %~dp0` → node 读取 `gui-settings.json` 端口注入 `PORT`（失败回退 3000）→ 校验 server.js → ping 延迟 ~1s → CMD 原生 `start "" http://localhost:%PORT%` 开浏览器（**无 PowerShell**）→ 当前窗口前台跑 `node server.js`（日志窗口） |
 | `gui/start-gui-silent.vbs` | 静默启动（WScript.Shell 窗口模式 0 隐藏 CMD 后台跑 start-gui.bat，零窗口零 PowerShell）（2026-08-17 新增） |
@@ -64,7 +65,7 @@
 | `/api/accounts/:email` | DELETE | - | 删除账号（备份 .bak→splice→写回，失败回滚） |
 | `/api/config` | GET/PUT | JSON 配置对象 | 读取/更新全局配置（宽松校验；强制忽略 parallelSearching；备份 .bak+合并写回） |
 | `/api/gui-settings` | GET/PUT | JSON `{port}` | 读取/保存 GUI 专属设置（端口校验 1024-65535 整数；写 gui/gui-settings.json + .bak 备份；重启后生效） |
-| `/api/config/reset` | POST | - | 重置为 src/config.example.json 默认 |
+| `/api/config/reset` | POST | - | 重置为默认配置（模板：根目录 config.example.json 优先，src/config.example.json 回退） |
 | `/api/config/open` | POST | - | 系统默认程序打开实际 config 文件 |
 | `/api/sessions/import` | POST | `{filename,dataBase64}` | 导入 Session zip（白名单 session_*.json+防穿越+.bak） |
 | `/api/sessions/export` | GET | - | 导出 Session zip |
@@ -75,9 +76,9 @@
 | `/api/logs/summary` | GET | - | 最新日志聚合摘要 |
 | `/api/data/export` | GET | - | 一键导出全部数据 zip（sessions+logs+accounts.json+config.json） |
 | `/api/data/import` | POST | `{filename,dataBase64}` | 一键导入全部数据 zip（白名单+防穿越+.bak+失败回滚） |
-| `/api/start` | POST | - | 启动任务子进程（spawn node dist/index.js，开发模式降级 ts-node） |
-| `/api/stop` | POST | - | 停止任务（SIGTERM→10s SIGKILL 兜底） |
-| `/api/task` | GET | - | 任务状态 + 最近 100 行日志 |
+| `/api/start` | POST | - | 启动任务（转发上游 Control API POST /start；上游 API 未运行时自动拉起，runCommand 优先 dist/index.js、降级 ts-node） |
+| `/api/stop` | POST | - | 停止任务（转发上游 Control API POST /stop；停止超时/强制杀由上游 STOP_TIMEOUT_MS 管理） |
+| `/api/task` | GET | - | 任务状态 + 最近 100 行日志（转发上游 GET /status + /logs，映射为 `{running,pid,startedAt,log:[{time,line}]}`；上游不可达时降级空状态+诊断行） |
 | `/api/shutdown` | POST | - | 关闭服务（延迟 500ms 退出） |
 | `/api/stats`/`/api/summary` | GET | - | 日志统计摘要（即时重算） |
 | `/api/keepalive` | GET | - | SSE 长连接保活（text/event-stream+keep-alive；断开进入 5s 静默期，期内新连接取消销毁，超时才退出） |
@@ -86,6 +87,7 @@
 ### 关键设计决策
 
 - **本地 Token 鉴权 + CORS 收紧（2026-08-21）**：启动时 `crypto.randomBytes(32)` 生成一次性令牌；前端页面加载时调 `GET /api/auth/token` 领取并缓存，所有业务请求经 `apiFetch` 统一携带 `X-Auth-Token`，401 时提示并刷新页面；同时移除全部 JSON 响应的 `Access-Control-Allow-Origin: *`——跨站网页既读不到令牌接口的响应，也调不动任何接口（此前本机任意网页可读走全部账号凭据、启停任务）。安全边界说明：令牌接口本身免鉴权（本机进程可通过 curl 获取），但本机进程本就处于信任边界内（可直接读 accounts.json），鉴权的防御对象是浏览器中的跨站网页。
+- **任务进程管理走上游 Control API（方案 C，2026-09-06）**：GUI 不再自己 spawn 核心脚本；首次任务请求时 `apiBridge.ensureApi()` 探测 `127.0.0.1:3010/health`，未运行则 spawn `node scripts/api/server.js`（scripts/api 为上游 V4 内置的零依赖 Control API）。为何只桥接进程管理而不转发配置/日志写读：①上游 `/logs` 是内存环形缓冲（重启即丢），GUI 收益统计依赖 logs/ 持久化文件；②config 写转发需要起真实上游 API 才能测，测试沙箱伤筋动骨，本地保留校验+备份+合并写逻辑测试覆盖完整；③耦合面收敛为「一个受管子进程」。生命周期：GUI `exit`/SIGINT/SIGTERM 钩子 `shutdownBridge()` 收尾自己拉起的上游 API（外部启动的不接管）；强杀残留的上游 API 会在下次 `ensureApi` 时被 /health 探测复用，不冲突。
 - **配置写互斥（2026-08-21）**：`PUT /api/config` 加模块级 `isWriting` 锁，写入期间到达的并发请求返回 409「系统正忙，请稍后重试」；readBody 后 `setImmediate` 让出事件循环，使同一批并发请求先完成锁检查（本地回环下小请求体与请求头同包缓冲，若不让出，前一请求会在后一请求的 request 回调前完成并释放锁，20 并发实测仍全部 200）。`POST /api/config/reset` 未纳入互斥（仅手动触发），属已知小面。
 - **进程级单实例保护（2026-08-21）**：项目根 `.gui.pid` 记录进程号，启动前检测存活实例则友好提示退出；选 pid 文件而非端口检测的原因——Windows 上 SO_REUSEADDR 语义允许第二个进程重复 bind 同一端口，EADDRINUSE 会漏判（保留作为 Linux/macOS 的兜底）。正常退出时清理 pid 文件，`taskkill /f` 强杀残留由下次启动的存活检测兜底。
 - **日志目录固定为项目根目录 `logs/`**（与 Logger.ts 写入位置一致）。
