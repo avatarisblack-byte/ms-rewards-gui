@@ -405,10 +405,10 @@ describe('I-A 账号接口', () => {
 
 // ============ /api/logs ============
 describe('I-L 日志接口', () => {
-    test('I-L01 GET /api/logs 返回 3 个夹具日志文件', async () => {
+    test('I-L01 GET /api/logs 返回 4 个夹具日志文件', async () => {
         const r = await H.request(BASE, '/api/logs')
         assert.strictEqual(r.status, 200)
-        assert.strictEqual(r.json.files.length, 3)
+        assert.strictEqual(r.json.files.length, 4)
     })
 
     test('I-L02 GET /api/logs/summary 返回条目与账号聚合', async () => {
@@ -523,7 +523,7 @@ describe('I-D 数据与 Session 接口', () => {
         assert.match(r.headers.get('content-type') || '', /application\/zip/)
     })
 
-    test('I-D05 Session 导入落盘到 dist/browser/sessions 且拒绝非 session 文件', async t => {
+    test('I-D05 Session 导入（v3 格式包）落盘到会话目录且拒绝非 session 文件', async t => {
         if (!archiveSpawnable) return t.skip('当前执行环境禁止子进程管道（EPERM），跳过压缩相关用例')
         const zip = H.makeZip([
             { name: 'user@example.com/session_desktop.json', data: '{"cookies":[]}' },
@@ -531,9 +531,53 @@ describe('I-D 数据与 Session 接口', () => {
         ])
         const r = await H.request(BASE, '/api/sessions/import', { method: 'POST', json: { filename: 's.zip', dataBase64: zip.toString('base64') } })
         assert.strictEqual(r.status, 200, `导入失败: ${JSON.stringify(r.json)}`)
-        const target = path.join(SB, 'dist', 'browser', 'sessions', 'user@example.com')
+        // v3 格式包兼容：落盘到会话根目录（v4 下为 <根>/sessions/，旧 dist/browser/sessions 不再是首选）
+        const target = path.join(SB, 'sessions', 'user@example.com')
         assert.ok(fs.existsSync(path.join(target, 'session_desktop.json')))
         assert.ok(!fs.existsSync(path.join(target, 'not-a-session.txt')), '非 session 文件被导入')
+    })
+
+    test('I-D06 Session 导入（v4 sessions.db）落盘到 sessions/ 根目录', async t => {
+        if (!archiveSpawnable) return t.skip('当前执行环境禁止子进程管道（EPERM），跳过压缩相关用例')
+        const zip = H.makeZip([
+            { name: 'sessions/sessions.db', data: 'sqlite-db-bytes' },
+            { name: 'sessions/sessions.db-wal', data: 'wal-bytes' },
+            { name: 'evil.txt', data: 'ignored' },
+        ])
+        const r = await H.request(BASE, '/api/sessions/import', { method: 'POST', json: { filename: 's4.zip', dataBase64: zip.toString('base64') } })
+        assert.strictEqual(r.status, 200, `导入失败: ${JSON.stringify(r.json)}`)
+        assert.ok(fs.existsSync(path.join(SB, 'sessions', 'sessions.db')), 'sessions.db 未落盘')
+        assert.ok(fs.existsSync(path.join(SB, 'sessions', 'sessions.db-wal')), 'WAL 伴生文件未落盘')
+        assert.ok(!fs.existsSync(path.join(SB, 'sessions', 'evil.txt')), '非会话文件被导入')
+    })
+
+    test('I-D07 Session 导出（v4 sessions.db）返回 zip 且解压后含库文件', async t => {
+        if (!archiveSpawnable) return t.skip('当前执行环境禁止子进程管道（EPERM），跳过压缩相关用例')
+        const r = await H.request(BASE, '/api/sessions/export')
+        assert.strictEqual(r.status, 200)
+        assert.match(r.headers.get('content-type') || '', /application\/zip/)
+        // 用被测 archive 解压验证内容（zip 为 deflate 压缩，不能字节级搜索）
+        const archive = H.loadGuiModule(SB, 'lib/archive')
+        const os = require('node:os')
+        const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sess-export-'))
+        const zipFile = path.join(outDir, 'export.zip')
+        fs.writeFileSync(zipFile, r.buffer)
+        await archive.unzipToDir(zipFile, path.join(outDir, 'extracted'))
+        assert.ok(fs.existsSync(path.join(outDir, 'extracted', 'sessions.db')), 'zip 中未找到 sessions.db')
+        assert.strictEqual(fs.readFileSync(path.join(outDir, 'extracted', 'sessions.db'), 'utf-8'), 'sqlite-db-bytes')
+        fs.rmSync(outDir, { recursive: true, force: true })
+    })
+
+    test('I-D08 一键数据导入兼容 v4 sessions.db', async t => {
+        if (!archiveSpawnable) return t.skip('当前执行环境禁止子进程管道（EPERM），跳过压缩相关用例')
+        const zip = H.makeZip([
+            { name: 'sessions/sessions.db', data: 'gui-data-db-bytes' },
+            { name: 'logs/2026-01-01.log', data: 'irrelevant' },
+        ])
+        const r = await H.request(BASE, '/api/data/import', { method: 'POST', json: { filename: 'd.zip', dataBase64: zip.toString('base64') } })
+        assert.strictEqual(r.status, 200, `导入失败: ${JSON.stringify(r.json)}`)
+        assert.strictEqual(r.json.imported.sessions, 1)
+        assert.ok(fs.existsSync(path.join(SB, 'sessions', 'sessions.db')))
     })
 })
 

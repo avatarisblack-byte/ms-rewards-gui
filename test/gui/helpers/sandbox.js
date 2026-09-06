@@ -68,11 +68,17 @@ function fixtureAccount(email = 'tester.a@example.com') {
     }
 }
 
-/** 单行日志构造（格式：utc [local] [account] [level] platform [event] message） */
+/** 单行日志构造（v3 格式：utc [local] [account] [level] platform [event] message） */
 function logLine(utc, account, level, platform, event, message) {
     const d = new Date(utc)
     const local = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
     return `${utc} [${local}] [${account}] [${level}] ${platform} [${event}] ${message}`
+}
+
+/** 单行日志构造（v4 格式，2026-09-06 适配 V4-china：[local] [account] [level] platform [event] message，
+ * 无 UTC 时间戳（v4 Logger 只打 toLocaleString 本地时间），账户字段主进程为 MAIN，平台为 DESKTOP/MOBILE/MAIN） */
+function logLineV4(local, account, level, platform, event, message) {
+    return `[${local}] [${account}] [${level}] ${platform} [${event}] ${message}`
 }
 
 /**
@@ -83,14 +89,17 @@ function logLine(utc, account, level, platform, event, message) {
  *   day1 tester.a：ACCOUNT-END 权威 +100
  *   day2 tester.a：同日两次运行 +30/+20 累加 = 50；tester.b：+70
  *   day3 tester.b：无 ACCOUNT-END → 活动积分兜底 10+15+3+3 = 31
- *   grandTotal = 100 + 120 + 31 = 251
+ *   day4（v4 格式日志）tester.a：ACCOUNT-END 权威 +123（活动行和 31 不参与，验证 END 优先）；
+ *        tester.c：无历史段 → 活动积分兜底 +5；[MAIN] 汇总行不计
+ *   grandTotal = 100 + 120 + 31 + 128 = 379（day4 = tester.a 123 + tester.c 5）
  */
 const FIXTURE_EXPECT = {
-    days: 3,
-    grandTotal: 251,
-    accountTotals: { 'tester.a': 150, 'tester.b': 101 },
+    days: 4,
+    grandTotal: 379,
+    accountTotals: { 'tester.a': 273, 'tester.b': 101, 'tester.c': 5 },
     day2: { account: 'tester.a', collectedPoints: 50, initialPoints: 600, finalPoints: 650 },
     day3ActivityPoints: 31,
+    day4: { account: 'tester.a', collectedPoints: 123, initialPoints: 600, finalPoints: 723 },
 }
 
 function writeLogFixtures(logsDir) {
@@ -133,6 +142,27 @@ function writeLogFixtures(logsDir) {
     fs.writeFileSync(path.join(logsDir, '2026-03-02.log'), day1, 'utf-8')
     fs.writeFileSync(path.join(logsDir, '2026-03-03.log'), day2, 'utf-8')
     fs.writeFileSync(path.join(logsDir, '2026-03-04.log'), day3, 'utf-8')
+
+    // day4：v4 格式日志（gui-v4-api 分支，V4-china 文案）。日期归属靠文件名（v4 行无 UTC 时间戳）
+    const day4 = [
+        // tester.a 完整运行段：v4 文案的活动行（英文键 pointsGained/currentBalance）
+        logLineV4('2026/3/5 12:00:00', 'tester.a', 'INFO', 'DESKTOP', 'ACCOUNT-START', '开始处理账户: tester.a@example.com | geoLocale: auto | locale: zh-CN'),
+        logLineV4('2026/3/5 12:01:00', 'tester.a', 'INFO', 'DESKTOP', 'SEARCH-BING', '获得积分=3 | 当前余额=603 | 查询="v4搜索" | 桌面: 5/30'),
+        logLineV4('2026/3/5 12:02:00', 'tester.a', 'INFO', 'DESKTOP', 'URL-REWARD', 'UrlReward 完成 | offerId=Gamification_DailySet_Child1 | pointsGained=10 | currentBalance=613'),
+        logLineV4('2026/3/5 12:03:00', 'tester.a', 'INFO', 'MOBILE', 'DAILY-CHECK-IN', '每日签到完成 | type=103 | pointsGained=15 | currentBalance=628'),
+        logLineV4('2026/3/5 12:04:00', 'tester.a', 'INFO', 'MOBILE', 'READ-TO-EARN', '已阅读第 1/10 篇文章 | status=200 | pointsGained=3 | currentBalance=631'),
+        // v4 搜索轮汇总行（与单次行同一积分的两层表述）：计入会双计 3，必须被「查询=」限定排除
+        logLineV4('2026/3/5 12:05:00', 'tester.a', 'INFO', 'DESKTOP', 'SEARCH-BING', '必应搜索完成 | 获得积分=3 | 当前余额=631 | 之前余额=600 | 搜索次数=5 | 桌面: 5/30'),
+        logLineV4('2026/3/5 12:06:00', 'tester.a', 'INFO', 'DESKTOP', 'ACCOUNT-END', '账户完成: tester.a@example.com | 获得积分=123 | 原余额=600 | 现余额=723 | 持续秒数=100'),
+        // tester.c 惰性段（无历史段、无 ACCOUNT-START/END）：活动积分兜底。不用 tester.b——
+        // 其 day3 段已 started 且跨文件保持，day4 再出现会按「跨天运行未完成」口径合并（现有设计）
+        logLineV4('2026/3/5 13:00:00', 'tester.c', 'INFO', 'MOBILE', 'SEARCH-BING', '获得积分=5 | 当前余额=205 | 查询="v4b" | 移动: 2/20'),
+        // v4 主进程行：账户字段 MAIN + 汇总积分 999，任何口径都不得计入
+        logLineV4('2026/3/5 14:00:00', 'MAIN', 'INFO', 'DESKTOP', 'SEARCH-MANAGER', '奖励搜索汇总 | 获得积分=999 | 当前余额=723'),
+        '乱码行 not matching any pattern',
+        '',
+    ].join('\n') + '\n'
+    fs.writeFileSync(path.join(logsDir, '2026-03-05.log'), day4, 'utf-8')
 }
 
 // ---------- 沙箱 ----------
@@ -353,6 +383,7 @@ module.exports = {
     fixtureConfig,
     fixtureAccount,
     logLine,
+    logLineV4,
     writeLogFixtures,
     createSandbox,
     removeSandbox,

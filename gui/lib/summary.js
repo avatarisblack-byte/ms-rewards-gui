@@ -48,10 +48,45 @@ function toLocalDateKey(utcTime, fallback) {
     return fallback || null
 }
 
+// ===== v3/v4 日志文案兼容（2026-09-06，gui-v4-api 分支适配 V4-china） =====
+// v3 ACCOUNT-END：账户完成: xxx | 总计: +100 | 原始: 500 → 新值: 600 | 持续时间: 900.0秒
+// v4 ACCOUNT-END：账户完成: xxx | 获得积分=100 | 原余额=500 | 现余额=600 | 持续秒数=900
+const GAIN_RE = /(?:获得积分|pointsGained)=(\d+)/
+
+// ACCOUNT-END 权威字段（总计/原始/新值），双格式兼容
+function parseAccountEndFields(msg) {
+    return {
+        t: msg.match(/总计:\s*\+(\d+)/) || msg.match(/获得积分=(\d+)/),
+        i: msg.match(/原始:\s*(\d+)\s*→/) || msg.match(/原余额=(\d+)/),
+        f: msg.match(/→\s*新值:\s*(\d+)/) || msg.match(/现余额=(\d+)/)
+    }
+}
+
+// 活动积分兜底行（INFO 级）：事件白名单 + 消息特征，键名双格式（获得积分= | pointsGained=）。
+// SEARCH-BING 限定「单次搜索行」（含 查询=/query= 字段）：v4 的「必应搜索完成/奖励搜索完成」
+// 等汇总行与单次行是同一积分的两层表述，全部计入会双计（v3 真实日志仅单次行带积分键）。
+function activityGain(e) {
+    const msg = e.message || ''
+    if (e.event === 'URL-REWARD') {
+        if (/UrlReward 完成|完成UrlReward/.test(msg) && !msg.includes('未获得积分')) return msg.match(GAIN_RE)
+    } else if (e.event === 'DAILY-CHECK-IN') {
+        if (/每日签到完成|完成每日签到/.test(msg)) return msg.match(GAIN_RE)
+    } else if (e.event === 'READ-TO-EARN') {
+        // 只计每篇行（v4「已阅读第 N/M 篇」/ v3「阅读文章」），排除 v4 汇总行「读文赚积分完成」防双计
+        if (/已阅读第|阅读文章/.test(msg)) return msg.match(GAIN_RE)
+    } else if (e.event === 'SAIOS') {
+        if (msg.includes('SearchOnBing 完成')) return msg.match(GAIN_RE)
+    } else if (e.event === 'SEARCH-BING') {
+        if (/查询=|query=/.test(msg)) return msg.match(GAIN_RE)
+    }
+    return null
+}
+
 function summarizeLogs(entries) {
     const accounts = {}
     for (const e of entries) {
-        if (!e || e.account === '主进程' || isRunLevelEvent(e.event)) continue
+        // v4 主进程账户字段为 MAIN（v3 为 主进程）；run 级事件另有按 event 的黑名单过滤
+        if (!e || e.account === '主进程' || e.account === 'MAIN' || isRunLevelEvent(e.event)) continue
         if (!accounts[e.account]) {
             accounts[e.account] = { account: e.account, entries: 0, lastEvent: null, lastLevel: null, lastTime: null, lastMessage: null, collectedPoints: null, initialPoints: null, finalPoints: null }
         }
@@ -67,23 +102,22 @@ function summarizeLogs(entries) {
         const msg = e.message || ''
 
         if (e.event === 'ACCOUNT-END') {
-            const t = msg.match(/总计:\s*\+(\d+)/)
-            const i = msg.match(/原始:\s*(\d+)\s*→/)
-            const f = msg.match(/→\s*新值:\s*(\d+)/)
+            const { t, i, f } = parseAccountEndFields(msg)
             // 同一天多次运行：收益累加；原始积分保留第一次，新值保留最后一次
             if (t) acc.collectedPoints = (acc.collectedPoints || 0) + parseInt(t[1], 10)
             if (i && acc.initialPoints === null) acc.initialPoints = parseInt(i[1], 10)
             if (f) acc.finalPoints = parseInt(f[1], 10)
-        } else if (e.event === 'URL-REWARD' && msg.includes('完成UrlReward')) {
-            const g = msg.match(/获得积分=(\d+)/)
-            const n = msg.match(/新余额=(\d+)/)
+        } else if (e.event === 'URL-REWARD' && /UrlReward 完成|完成UrlReward/.test(msg)) {
+            const g = msg.match(GAIN_RE)
+            // v3 键「新余额=」/ v4 键「currentBalance=」
+            const n = msg.match(/新余额=(\d+)/) || msg.match(/currentBalance=(\d+)/)
             if (g) acc.collectedFromLastRun = parseInt(g[1], 10)
             if (n) acc.latestBalance = parseInt(n[1], 10)
-        } else if (e.event === 'SEARCH-BING' && msg.includes('获得积分')) {
-            const g = msg.match(/获得积分=(\d+)/)
+        } else if (e.event === 'SEARCH-BING' && /查询=|query=/.test(msg)) {
+            const g = msg.match(GAIN_RE)
             if (g) acc.searchPoints = (acc.searchPoints || 0) + parseInt(g[1], 10)
-        } else if (e.event === 'DAILY-CHECK-IN' && msg.includes('完成每日签到')) {
-            const g = msg.match(/获得积分=(\d+)/)
+        } else if (e.event === 'DAILY-CHECK-IN' && /每日签到完成|完成每日签到/.test(msg)) {
+            const g = msg.match(GAIN_RE)
             if (g) acc.checkInPoints = parseInt(g[1], 10)
         }
     }
@@ -140,7 +174,7 @@ function generateSummary(logsDir = LOGS_DIR) {
         try { content = fs.readFileSync(path.join(logsDir, file), 'utf-8') } catch { continue }
         for (const line of content.split('\n')) {
             const entry = parseLogLine(line)
-            if (!entry || entry.account === '主进程' || isRunLevelEvent(entry.event)) continue
+            if (!entry || entry.account === '主进程' || entry.account === 'MAIN' || isRunLevelEvent(entry.event)) continue
             const dateKey = toLocalDateKey(entry.utcTime, file.replace('.log', ''))
             if (!dateKey) continue
             if (entry.event === 'ACCOUNT-START') {
@@ -159,24 +193,14 @@ function generateSummary(logsDir = LOGS_DIR) {
             }
             seg.lastDateKey = dateKey // 段内最后一行日期 = 段结束日
             if (entry.event === 'ACCOUNT-END') {
-                const m = (entry.message || '').match(/总计:\s*\+(\d+)/)
-                if (m) {
-                    seg.endSum += parseInt(m[1], 10)
+                const { t } = parseAccountEndFields(entry.message || '')
+                if (t) {
+                    seg.endSum += parseInt(t[1], 10)
                     seg.hasEnd = true
                 }
             } else if (entry.level === 'INFO') {
-                const msg = entry.message || ''
-                let p = null
-                if (msg.includes('完成UrlReward') && msg.includes('获得积分')) {
-                    const m = msg.match(/获得积分=(\d+)/); if (m) p = parseInt(m[1], 10)
-                } else if (msg.includes('完成每日签到') && msg.includes('获得积分')) {
-                    const m = msg.match(/获得积分=(\d+)/); if (m) p = parseInt(m[1], 10)
-                } else if (msg.includes('阅读文章') && msg.includes('获得积分')) {
-                    const m = msg.match(/获得积分=(\d+)/); if (m) p = parseInt(m[1], 10)
-                } else if (entry.event === 'SEARCH-BING' && msg.includes('获得积分')) {
-                    const m = msg.match(/获得积分=(\d+)/); if (m) p = parseInt(m[1], 10)
-                }
-                if (p !== null) seg.act += p
+                const m = activityGain(entry)
+                if (m) seg.act += parseInt(m[1], 10)
             }
         }
     }
@@ -214,4 +238,4 @@ function writeSummaryFile(summary, target) {
     }
 }
 
-module.exports = { summarizeLogs, summarizeAllLogs, generateSummary, writeSummaryFile }
+module.exports = { parseAccountEndFields, activityGain, summarizeLogs, summarizeAllLogs, generateSummary, writeSummaryFile }

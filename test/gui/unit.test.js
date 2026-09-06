@@ -231,13 +231,13 @@ describe('U-L logger 日志解析与读取', () => {
         assert.ok(!e.message.includes('\r'), `message 残留 \\r: ${JSON.stringify(e.message)}`)
     })
 
-    test('U-L05 listLogFiles 返回 3 个夹具文件且按日期倒序', () => {
-        assert.deepStrictEqual(logger.listLogFiles(), ['2026-03-04.log', '2026-03-03.log', '2026-03-02.log'])
+    test('U-L05 listLogFiles 返回 4 个夹具文件且按日期倒序', () => {
+        assert.deepStrictEqual(logger.listLogFiles(), ['2026-03-05.log', '2026-03-04.log', '2026-03-03.log', '2026-03-02.log'])
     })
 
     test('U-L06 readLogFile(null) 读取最新日志且 entries 非空', () => {
         const r = logger.readLogFile(null)
-        assert.strictEqual(r.date, '2026-03-04')
+        assert.strictEqual(r.date, '2026-03-05')
         assert.ok(r.entries.length > 0)
     })
 
@@ -280,7 +280,7 @@ describe('U-S summary 统计聚合', () => {
         assert.strictEqual(s.accountTotals.length, 0)
     })
 
-    test('U-S02 夹具日志聚合为 3 天、总计 251（ACCOUNT-END 权威 + 活动积分兜底）', () => {
+    test('U-S02 夹具日志聚合（v3 三天 + v4 一天，ACCOUNT-END 权威 + 活动积分兜底）', () => {
         const s = summary.generateSummary()
         assert.strictEqual(s.daily.length, H.FIXTURE_EXPECT.days)
         assert.strictEqual(s.grandTotal, H.FIXTURE_EXPECT.grandTotal)
@@ -328,6 +328,37 @@ describe('U-S summary 统计聚合', () => {
 
     test('U-S09 entry 缺少 message 字段时不应抛异常【期望依据：日志格式演进或第三方导入可能产生残缺条目，统计层应容错】', () => {
         assert.doesNotThrow(() => summary.summarizeLogs([{ account: 'tester.z', level: 'INFO', event: 'ACCOUNT-END', utcTime: '2026-03-02T04:00:00.000Z' }]))
+    })
+
+    test('U-S11 v4 格式 ACCOUNT-END 权威优先：day4 tester.a 收益=123（活动行和 31 不参与）', () => {
+        const s = summary.generateSummary()
+        const day = s.daily.find(d => d.accounts.some(a => a.account === 'tester.a' && a.points === H.FIXTURE_EXPECT.day4.collectedPoints))
+        assert.ok(day, '未找到 v4 夹具日（day4）tester.a 的 END 权威收益')
+        assert.strictEqual(day.total, 128, 'day4 总计应为 tester.a 123 + tester.b 5')
+    })
+
+    test('U-S12 v4 主进程行（MAIN 账户/汇总积分 999）不得进入统计', () => {
+        const s = summary.generateSummary()
+        assert.ok(!s.accountTotals.some(a => a.account === 'MAIN'), 'MAIN 被当作账号统计（主进程行污染）')
+        // 搜索轮汇总行（必应搜索完成|获得积分=3）与单次行同积分，计入会双计：day4 tester.a 恰为 END 123
+        const all = summary.summarizeAllLogs()
+        const a = all.find(x => x.account === 'tester.a')
+        assert.strictEqual(a.collectedPoints, 150 + 123, 'ACCOUNT-END 累加结果异常（可能汇总行被重复计入）')
+    })
+
+    test('U-S13 parseLogLine 兼容 v4 单时间戳行', () => {
+        const line = H.logLineV4('2026/3/5 12:06:00', 'tester.a', 'INFO', 'DESKTOP', 'ACCOUNT-END', '账户完成: tester.a@example.com | 获得积分=123 | 原余额=600 | 现余额=723 | 持续秒数=100')
+        const e = logger.parseLogLine(line)
+        assert.ok(e, 'v4 行解析失败')
+        assert.strictEqual(e.account, 'tester.a')
+        assert.strictEqual(e.level, 'INFO')
+        assert.strictEqual(e.event, 'ACCOUNT-END')
+        assert.strictEqual(e.utcTime, null)
+        assert.match(e.message, /获得积分=123/)
+        const { t, i, f } = summary.parseAccountEndFields(e.message)
+        assert.strictEqual(t[1], '123')
+        assert.strictEqual(i[1], '600')
+        assert.strictEqual(f[1], '723')
     })
 
     test('U-S10 写入不可写目标时返回 null 而非抛异常', () => {

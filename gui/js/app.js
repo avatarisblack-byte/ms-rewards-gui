@@ -205,10 +205,12 @@
         function parseAccountEnd(log) {
             if (!log || log.lastEvent !== 'ACCOUNT-END' || !log.lastMessage) return null;
             const m = log.lastMessage;
-            const total = (m.match(/总计:\s*\+(\d+)/) || [])[1];
-            const initial = (m.match(/原始:\s*(\d+)\s*→/) || [])[1];
-            const final = (m.match(/→\s*新值:\s*(\d+)/) || [])[1];
-            const durSec = (m.match(/持续时间:\s*([\d.]+)\s*秒/) || [])[1];
+            // 双格式兼容（2026-09-06）：v3「总计: +N | 原始: X → 新值: Y | 持续时间: N秒」/
+            // v4「获得积分=N | 原余额=X | 现余额=Y | 持续秒数=N」（V4-china 日志文案）
+            const total = (m.match(/总计:\s*\+(\d+)/) || m.match(/获得积分=(\d+)/) || [])[1];
+            const initial = (m.match(/原始:\s*(\d+)\s*→/) || m.match(/原余额=(\d+)/) || [])[1];
+            const final = (m.match(/→\s*新值:\s*(\d+)/) || m.match(/现余额=(\d+)/) || [])[1];
+            const durSec = (m.match(/持续时间:\s*([\d.]+)\s*秒/) || m.match(/持续秒数=([\d.]+)/) || [])[1];
             if (total == null && initial == null && final == null && durSec == null) return null;
             return {
                 total: total != null ? parseInt(total, 10) : null,

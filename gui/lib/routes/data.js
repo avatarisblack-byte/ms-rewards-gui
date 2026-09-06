@@ -2,13 +2,14 @@
  * 一键数据路由（GET /api/data/export、POST /api/data/import）
  * 签名：(req, res, pathname, ctx) => boolean
  * 打包/恢复 sessions + logs + accounts.json + config.json（白名单 + 防穿越 + .bak 回滚）
+ * sessions 双格式（2026-09-06）：v4 sessions/sessions.db（+WAL 伴生）；v3 <email>/session_*.json 回退
  */
 const fs = require('fs')
 const path = require('path')
+const sessionFiles = require('../sessionFiles')
 
 function handleData(req, res, pathname, ctx) {
     const { config, http, archive, logCache } = ctx
-    const SESSIONS_ROOT = path.join(config.ROOT, 'dist', 'browser', 'sessions')
 
     // GET /api/data/export
     if (pathname === '/api/data/export' && req.method === 'GET') {
@@ -19,18 +20,10 @@ function handleData(req, res, pathname, ctx) {
                 const stageDir = path.join(tmpRoot, 'export')
                 fs.mkdirSync(stageDir, { recursive: true })
 
-                if (fs.existsSync(SESSIONS_ROOT)) {
-                    const accountDirs = fs.readdirSync(SESSIONS_ROOT, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
-                    for (const emailDir of accountDirs) {
-                        const dirPath = path.join(SESSIONS_ROOT, emailDir)
-                        if (!fs.existsSync(dirPath)) continue
-                        const files = fs.readdirSync(dirPath).filter(f => /^session_.*\.json$/.test(f))
-                        for (const fileName of files) {
-                            const dir = path.join(stageDir, 'sessions', emailDir)
-                            fs.mkdirSync(dir, { recursive: true })
-                            fs.copyFileSync(path.join(dirPath, fileName), path.join(dir, fileName))
-                        }
-                    }
+                for (const s of sessionFiles.listSessionFiles()) {
+                    const dir = path.join(stageDir, 'sessions', path.dirname(s.rel))
+                    fs.mkdirSync(dir, { recursive: true })
+                    fs.copyFileSync(s.abs, path.join(dir, path.basename(s.rel)))
                 }
 
                 if (fs.existsSync(config.LOGS_DIR)) {
@@ -101,13 +94,24 @@ function handleData(req, res, pathname, ctx) {
                         if (rel.split(path.sep).some(p => p === '..')) continue
                         if (entry.isDirectory()) { scanDir(full, rel); continue }
                         const norm = rel.replace(/\\/g, '/')
+                        // v4 会话库文件（sessions/sessions.db 及 WAL 伴生；gui-session 导出的裸文件名同样收录）
+                        const dbMatch = norm.match(/^(?:sessions\/)?(sessions\.db(?:-wal|-shm)?)$/)
+                        if (dbMatch) {
+                            const targetFile = sessionFiles.resolveSessionTarget(dbMatch[1])
+                            if (!targetFile) continue
+                            fs.mkdirSync(path.dirname(targetFile), { recursive: true })
+                            backupFile(targetFile)
+                            fs.copyFileSync(full, targetFile)
+                            imported.sessions++
+                            continue
+                        }
+                        // v3 会话（sessions/<email>/session_*.json，旧格式包兼容）
                         const sessMatch = norm.match(/^sessions\/([^/]+)\/(session_.*\.json)$/)
                         if (sessMatch) {
                             const [, emailDir, fileName] = sessMatch
-                            const targetDir = path.join(SESSIONS_ROOT, emailDir)
-                            if (path.relative(SESSIONS_ROOT, targetDir).startsWith('..')) continue
-                            fs.mkdirSync(targetDir, { recursive: true })
-                            const targetFile = path.join(targetDir, fileName)
+                            const targetFile = sessionFiles.resolveSessionTarget(path.join(emailDir, fileName))
+                            if (!targetFile) continue
+                            fs.mkdirSync(path.dirname(targetFile), { recursive: true })
                             backupFile(targetFile)
                             fs.copyFileSync(full, targetFile)
                             imported.sessions++

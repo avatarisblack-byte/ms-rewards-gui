@@ -1,13 +1,18 @@
 /**
  * Session 路由（POST /api/sessions/import、GET /api/sessions/export）
+ * 方案 C / v4 适配（2026-09-06）：v4 会话为 <根>/sessions/sessions.db（SQLite 单库 + WAL 伴生），
+ * 保留 v3 <email>/session_*.json 旧格式兼容（经 lib/sessionFiles.js 双格式收集/恢复）。
  * 签名：(req, res, pathname, ctx) => boolean
  */
 const fs = require('fs')
 const path = require('path')
+const sessionFiles = require('../sessionFiles')
+
+// 允许导入的会话文件名：v4 单库（含 WAL 伴生）+ v3 按账号的 json（旧格式包兼容）
+const IMPORT_NAME_RE = /^(sessions\.db(-wal|-shm)?|session_.*\.json)$/
 
 function handleSessions(req, res, pathname, ctx) {
-    const { config, http, archive } = ctx
-    const SESSIONS_ROOT = path.join(config.ROOT, 'dist', 'browser', 'sessions')
+    const { http, archive } = ctx
 
     // POST /api/sessions/import
     if (pathname === '/api/sessions/import' && req.method === 'POST') {
@@ -26,7 +31,7 @@ function handleSessions(req, res, pathname, ctx) {
                 fs.writeFileSync(zipPath, Buffer.from(body.dataBase64, 'base64'))
                 await archive.unzipToDir(zipPath, extractDir)
 
-                const imported = {}
+                const imported = []
                 const scanDir = dir => {
                     if (!fs.existsSync(dir)) return
                     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -34,31 +39,27 @@ function handleSessions(req, res, pathname, ctx) {
                         const rel = path.relative(extractDir, full)
                         if (rel.startsWith('..') || path.isAbsolute(rel)) continue
                         if (entry.isDirectory()) { scanDir(full); continue }
-                        if (!/^session_.*\.json$/.test(entry.name)) continue
-                        const relParts = rel.split(path.sep)
-                        if (relParts.length < 2) continue
-                        const emailDir = relParts.slice(0, -1).join(path.sep)
-                        const targetDir = path.join(SESSIONS_ROOT, emailDir)
-                        if (path.relative(SESSIONS_ROOT, targetDir).startsWith('..')) continue
-                        fs.mkdirSync(targetDir, { recursive: true })
-                        const targetFile = path.join(targetDir, entry.name)
-                        if (fs.existsSync(targetFile)) { try { fs.copyFileSync(targetFile, targetFile + '.bak') } catch {} }
-                        fs.copyFileSync(full, targetFile)
-                        if (!imported[emailDir]) imported[emailDir] = []
-                        imported[emailDir].push(entry.name)
+                        // 白名单按文件名判断；zip 内路径可能是 sessions/ 前缀（gui-data 导出格式），剥掉后归一到 session 根
+                        if (!IMPORT_NAME_RE.test(entry.name)) continue
+                        const relParts = rel.split(path.sep).filter(p => p && p !== '.' && p !== 'sessions')
+                        const target = sessionFiles.resolveSessionTarget(relParts.join(path.sep))
+                        if (!target) continue
+                        fs.mkdirSync(path.dirname(target), { recursive: true })
+                        if (fs.existsSync(target)) { try { fs.copyFileSync(target, target + '.bak') } catch {} }
+                        fs.copyFileSync(full, target)
+                        imported.push(entry.name)
                     }
                 }
                 scanDir(extractDir)
                 if (tmpRoot) { try { fs.rmSync(tmpRoot, { recursive: true, force: true }) } catch {} ; tmpRoot = null }
 
-                const emails = Object.keys(imported)
-                if (!emails.length) return http.sendJson(res, 400, { error: '压缩包内未找到 session_*.json 文件，导入失败' })
-                console.log(`[GUI] 已导入 ${emails.length} 个账号的 Session → ${SESSIONS_ROOT}`)
+                if (!imported.length) return http.sendJson(res, 400, { error: '压缩包内未找到会话文件（v4: sessions.db*；v3: session_*.json），导入失败' })
+                console.log(`[GUI] 已导入 ${imported.length} 个会话文件 → ${sessionFiles.getSessionDir()}`)
                 return http.sendJson(res, 200, {
                     success: true,
-                    message: `已导入 ${emails.length} 个账号的 Session`,
-                    accounts: emails.map(e => ({ email: e, files: imported[e] })),
-                    target: SESSIONS_ROOT
+                    message: `已导入 ${imported.length} 个会话文件`,
+                    files: imported,
+                    target: sessionFiles.getSessionDir()
                 })
             } catch (error) {
                 if (tmpRoot) { try { fs.rmSync(tmpRoot, { recursive: true, force: true }) } catch {} }
@@ -72,23 +73,17 @@ function handleSessions(req, res, pathname, ctx) {
         return (async () => {
             let zipPath = null
             try {
-                if (!fs.existsSync(SESSIONS_ROOT)) return http.sendJson(res, 400, { error: 'No session directory found: dist/browser/sessions/' })
-                const accountDirs = fs.readdirSync(SESSIONS_ROOT, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
-                const sessions = []
-                for (const emailDir of accountDirs) {
-                    const dirPath = path.join(SESSIONS_ROOT, emailDir)
-                    if (!fs.existsSync(dirPath)) continue
-                    const files = fs.readdirSync(dirPath).filter(f => /^session_.*\.json$/.test(f))
-                    for (const fileName of files) sessions.push({ emailDir, fileName, fullPath: path.join(dirPath, fileName) })
+                const sessions = sessionFiles.listSessionFiles()
+                if (!sessions.length) {
+                    return http.sendJson(res, 400, { error: '没有可导出的会话（sessions/ 下无 sessions.db，且无 v3 格式 session_*.json）' })
                 }
-                if (!sessions.length) return http.sendJson(res, 400, { error: '没有可导出的 Session（dist/browser/sessions/ 下无 session_*.json）' })
 
                 const tmpRoot = archive.makeTmpRoot('gui-session-export')
                 const stageDir = path.join(tmpRoot, 'export')
                 for (const s of sessions) {
-                    const dir = path.join(stageDir, s.emailDir)
+                    const dir = path.join(stageDir, path.dirname(s.rel))
                     fs.mkdirSync(dir, { recursive: true })
-                    fs.copyFileSync(s.fullPath, path.join(dir, s.fileName))
+                    fs.copyFileSync(s.abs, path.join(dir, path.basename(s.rel)))
                 }
                 zipPath = path.join(tmpRoot, 'sessions.zip')
                 await archive.zipDir(stageDir, zipPath)
@@ -100,8 +95,7 @@ function handleSessions(req, res, pathname, ctx) {
                 res.writeHead(200, {
                     'Content-Type': 'application/zip',
                     'Content-Disposition': `attachment; filename="sessions-${stamp}.zip"`,
-                    'Content-Length': fileData.length,
-                    'Access-Control-Allow-Origin': '*'
+                    'Content-Length': fileData.length
                 })
                 res.end(fileData)
                 try { fs.rmSync(tmpRoot, { recursive: true, force: true }) } catch {}

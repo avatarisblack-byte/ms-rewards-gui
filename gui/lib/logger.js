@@ -12,11 +12,23 @@ function parseLogLine(line) {
     // 第三方导出的 zip）按 split('\n') 切分后每行残留 \r，会导致下方整行匹配失败被丢弃、统计归零
     const clean = line.replace(/\r+$/, '')
     if (clean.trim() === '') return null
-    const m = clean.match(
-        /^(\S+)\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+([^\s]+)\s+\[([^\]]+)\]\s+(.*)$/
+    // v3 行（双时间戳）：UTC-ISO [本地时间] [账户] [级别] 平台 [事件] 消息
+    const m3 = clean.match(
+        /^(\d{4}-\d{2}-\d{2}T\S+)\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)\s+\[([^\]]+)\]\s+(.*)$/
     )
-    if (!m) return null
-    return { utcTime: m[1], localTime: m[2], account: m[3], level: m[4], platform: m[5], event: m[6], message: m[7] }
+    if (m3) {
+        return { utcTime: m3[1], localTime: m3[2], account: m3[3], level: m3[4], platform: m3[5], event: m3[6], message: m3[7] }
+    }
+    // v4 行（单时间戳，2026-09-06 适配 V4-china）：[本地时间] [账户] [级别] 平台 [事件] 消息
+    // v4 Logger 只打一个 toLocaleString 本地时间戳；账户字段主进程为 MAIN、平台为 MAIN/MOBILE/DESKTOP。
+    // 无 UTC 时间戳时 utcTime=null，日期归属由 summary 的文件名（本地日期）兜底。
+    const m4 = clean.match(
+        /^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)\s+\[([^\]]+)\]\s+(.*)$/
+    )
+    if (m4) {
+        return { utcTime: null, localTime: m4[1], account: m4[2], level: m4[3], platform: m4[4], event: m4[5], message: m4[6] }
+    }
+    return null
 }
 
 function listLogFiles() {
