@@ -12,6 +12,8 @@ GUI 控制面板（`gui/`）的变更历史。于 2026-08-20 从 `doc/CODE_MAP.m
 
 | 日期 | 内容 |
 |------|------|
+| 2026-09-06 | **新功能：GUI 以独立应用窗口启动（用户需求）**：`start-gui.bat` 浏览器打开逻辑改为三级回退——Edge `--app` 模式（无标签栏/地址栏、任务栏独立图标，`--window-size=1400,900`）→ Chrome `--app` → 默认浏览器普通标签（legacy 回退）；纯 ASCII 注释遵守既有约束，块内注释用 rem（`::` 在括号块内会被当标签解析报错），含括号的 `Program Files (x86)` 路径靠引号保护（cmd 仅在引号外识别块括号）；页面新增内联 SVG favicon（奖杯），`--app` 窗口标题栏/任务栏不再显示默认地球图标；静默模式 `start-gui-silent.vbs` 跑同一 bat 自动获得新行为。实测 Edge --app 独立窗口弹出正常 |
+
 | 2026-09-06 | **新功能：环境已安装状态提示（方案 A）**：`routes/system.js` 新增只读 `GET /api/setup/status`——实质判据实时检测（deps=node_modules/patchright、browser=patchright 浏览器缓存 chromium*（PLAYWRIGHT_BROWSERS_PATH→三平台标准路径）、build=dist/index.js，附带 envFile=.env 账号提示），比 setup.bat 留标记更可靠（手动 npm i/构建同样识别）；前端按钮双形态——installed 时切绿色 `.btn-installed`「✓ 环境已安装」（点击打开环境详情弹窗：各项 ✓/✗ + 重新运行安装程序入口），未安装保持原样；点安装后 10s 轮询直至就绪（15 分钟上限）自动切换；环境已就绪时首次打开不再弹「环境安装提示」弹窗。测试新增 I-Y06（字段结构+沙箱翻转+组合一致性），176 用例全绿 |
 
 | 2026-09-06 | **v4 文件日志行格式适配：账号卡片/收益统计恢复实时更新（用户 newlog 实测定位）**：v4 Logger.writeLogToFile 在行首加 formatLocalTimestamp（本地时间，空格分隔+毫秒）→「YYYY-MM-DD HH:mm:ss.SSS [本地toString] [账户] [级别] 平台 [事件] 消息」——与 v3 UTC-ISO 双时间戳行、v4 console 单时间戳行均不同，parseLogLine 三种正则全部不匹配 → v4 运行段整段解析失败，账号卡片/收益停留在导入的历史日志（实测 newlog 1077 行 0 解析成功）。logger.js 新增第四分支（本地时间戳按本地时区解析回 UTC ISO，日期精确到行；注意首个括号是 toLocaleString 时间戳、账户在其后，分组曾错位产生时间戳伪账号已修正）。实测 newlog：1077 行全部解析，3 账号正确聚合（grandTotal=564） |

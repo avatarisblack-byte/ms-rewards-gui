@@ -25,11 +25,26 @@ echo   Port: http://localhost:%PORT%
 echo ================================================
 echo.
 
-:: ===== Open the browser with the native CMD start command (no PowerShell window) =====
+:: ===== Open as a standalone app window (Edge/Chrome --app mode), not a browser tab =====
+:: --app gives a dedicated window: no tab bar, no address bar, its own taskbar icon.
+:: Quote the full exe path - "Program Files (x86)" contains spaces and parentheses, and
+:: cmd only treats parentheses as block syntax outside quotes, so quoting keeps it safe.
 :: Give the node server ~1s to boot first. ping works without stdin, so it is reliable
 :: in both Normal and Silent (hidden console) modes - unlike timeout /t.
 ping -n 2 127.0.0.1 >nul
-start "" http://localhost:%PORT%
+
+set "APPURL=http://localhost:%PORT%"
+set "BROWSER_EXE=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
+if not exist "%BROWSER_EXE%" set "BROWSER_EXE=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
+if not exist "%BROWSER_EXE%" set "BROWSER_EXE=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
+if not exist "%BROWSER_EXE%" set "BROWSER_EXE=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
+
+if exist "%BROWSER_EXE%" (
+    start "" "%BROWSER_EXE%" --app=%APPURL% --window-size=1400,900
+) else (
+    rem Fallback: default browser opens a normal tab (legacy behavior)
+    start "" %APPURL%
+)
 
 :: ===== Run the server in the foreground: logs print into this CMD window =====
 node server.js
