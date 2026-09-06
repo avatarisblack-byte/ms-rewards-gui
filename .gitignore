@@ -32,6 +32,9 @@ test/data/
 # ===== 账号与运行日志（含凭据/邮箱等私密信息，严禁入库） =====
 .env
 *.log
+# 用户数据包（含账号密码与会话 Cookie）
+*.zip
+*.rar
 
 # ===== Agent Teams 插件运行时状态（非仓库内容） =====
 .agent-teams/
