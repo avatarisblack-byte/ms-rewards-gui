@@ -248,6 +248,7 @@
 
 | 日期 | 内容 |
 |------|------|
+| 2026-09-06 | **v4 日志/会话格式适配**：parseLogLine 双格式（v4 单时间戳行此前整行丢弃→统计归零）、summary/app.js ACCOUNT-END 与活动行双文案兼容（END 权威/汇总行不双计/MAIN 过滤）、Session 与一键导入导出适配 v4 sessions.db（新增 lib/sessionFiles.js），170 用例全绿；详见 `gui/CHANGELOG.md` |
 | 2026-08-21 | **`package.json`/`setup.bat` 保持与上游一致，安装问题改由 GUI 侧解决**：npm 11.17 中 `npm run` 嵌套 `npm i` 会因用户级 `.npmrc` 的 `allow-scripts` 配置误报 EALLOWSCRIPTS（上游环境无此配置故 setup.bat 正常）。非 GUI 文件（`package.json`/`setup.bat`）已回滚至上游版本零差异；改为 `gui/lib/routes/system.js` 的 `/api/setup` 在 spawn `setup.bat` 前注入剔除 `allow-scripts` 的干净 `NPM_CONFIG_USERCONFIG`（详见 `gui/CHANGELOG.md` 同日条目） |
 | 2026-08-21 | **次要问题收尾：P2 清零 + 工程化补全**（详见 `gui/CHANGELOG.md` 同日条目）：D18 前端超时/轮询退避（R-F03/R-F04 转绿，测试 157 用例全绿）、HTTP 服务超时、日志接口 405 补全、archive 路径拼接注入修复、`package.json` test 脚本、`.bak` 轮转（保留最近 5 个）与 cache 7 天清理 |
 | 2026-08-21 | **安全加固：本地 Token 鉴权 + 配置写锁 + 单实例保护**（详见 `gui/CHANGELOG.md` 同日条目） |
