@@ -19,8 +19,24 @@ function parseLogLine(line) {
     if (m3) {
         return { utcTime: m3[1], localTime: m3[2], account: m3[3], level: m3[4], platform: m3[5], event: m3[6], message: m3[7] }
     }
-    // v4 行（单时间戳，2026-09-06 适配 V4-china）：[本地时间] [账户] [级别] 平台 [事件] 消息
-    // v4 Logger 只打一个 toLocaleString 本地时间戳；账户字段主进程为 MAIN、平台为 MAIN/MOBILE/DESKTOP。
+    // v4 文件行（2026-09-06 发现）：Logger.ts 的 writeLogToFile 在行首加 formatLocalTimestamp(本地, 带毫秒)
+    // → 「YYYY-MM-DD HH:mm:ss.SSS [本地toString] [账户] [级别] 平台 [事件] 消息」。
+    // 形似 v3 双时间戳但第一个是本地时间（空格分隔、无 T/Z），v3 分支不匹配；与 console 行（行首即 [）也不同。
+    const m4f = clean.match(
+        /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)\s+\[([^\]]+)\]\s+(.*)$/
+    )
+    if (m4f) {
+        // 本地时间按本地时区解析回 UTC ISO，日期归属可精确到行（日志文件本就按本地日期分）。
+        // 括号字段依次为：[toLocaleString 时间] [账户] [级别]；随后 平台 [事件] 消息。
+        const d = new Date(`${m4f[1]}T${m4f[2]}`)
+        return {
+            utcTime: isNaN(d.getTime()) ? null : d.toISOString(),
+            localTime: m4f[3],
+            account: m4f[4], level: m4f[5], platform: m4f[6], event: m4f[7], message: m4f[8]
+        }
+    }
+    // v4 控制台行（单时间戳，2026-09-06 适配 V4-china）：[本地时间] [账户] [级别] 平台 [事件] 消息
+    // v4 Logger 的 console 只打一个 toLocaleString 本地时间戳；账户字段主进程为 MAIN、平台为 MAIN/MOBILE/DESKTOP。
     // 无 UTC 时间戳时 utcTime=null，日期归属由 summary 的文件名（本地日期）兜底。
     const m4 = clean.match(
         /^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)\s+\[([^\]]+)\]\s+(.*)$/

@@ -361,6 +361,23 @@ describe('U-S summary 统计聚合', () => {
         assert.strictEqual(f[1], '723')
     })
 
+    test('U-S14 parseLogLine 兼容 v4 文件行（formatLocalTimestamp 前缀，账号卡片实时更新依赖）', () => {
+        // v4 Logger.writeLogToFile 行首为本地时间戳（空格分隔+毫秒），与 v3 UTC-ISO 行、v4 console 行均不同
+        const line = '2026-09-06 19:37:45.843 [2026/9/6 19:37:45] [tester.a] [INFO] MOBILE [ACCOUNT-END] 账户完成: tester.a@example.com | 获得积分=10 | 原余额=1 | 现余额=11 | 持续秒数=5'
+        const e = logger.parseLogLine(line)
+        assert.ok(e, 'v4 文件行解析失败')
+        assert.strictEqual(e.account, 'tester.a', '账户字段错位（首个括号是 toLocaleString 时间戳，不是账户）')
+        assert.strictEqual(e.level, 'INFO')
+        assert.strictEqual(e.event, 'ACCOUNT-END')
+        assert.strictEqual(e.platform, 'MOBILE')
+        assert.ok(e.utcTime && !isNaN(new Date(e.utcTime).getTime()), 'utcTime 应为可解析的 ISO 时间')
+        assert.strictEqual(new Date(e.utcTime).getFullYear(), 2026)
+        const acc = summary.summarizeLogs([e])[0]
+        assert.strictEqual(acc.collectedPoints, 10)
+        assert.strictEqual(acc.initialPoints, 1)
+        assert.strictEqual(acc.finalPoints, 11)
+    })
+
     test('U-SM1 v3 会话 json 迁移进 v4 sessions.db（cookies→StorageState、指纹保留）', () => {
         const { DatabaseSync } = require('node:sqlite')
         const emailDir = path.join(SB, 'sessions', 'migrate@test.com')
