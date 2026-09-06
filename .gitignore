@@ -29,6 +29,10 @@ gui/cache/
 gui-data-*/
 test/data/
 
+# ===== 账号与运行日志（含凭据/邮箱等私密信息，严禁入库） =====
+.env
+*.log
+
 # ===== Agent Teams 插件运行时状态（非仓库内容） =====
 .agent-teams/
 

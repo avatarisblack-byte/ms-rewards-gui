@@ -21,7 +21,8 @@ let srv = null
 let BASE = ''
 
 const readConfigFile = () => JSON.parse(fs.readFileSync(path.join(SB, 'config.json'), 'utf-8'))
-const readAccountsFile = () => JSON.parse(fs.readFileSync(path.join(SB, 'accounts.json'), 'utf-8'))
+// v4 账号落盘于 .env（ACCOUNT_N_*）——经被测 envAccounts 模块读回为 v3 契约数组
+const readAccountsFile = () => H.loadGuiModule(SB, 'lib/envAccounts').readEnvFile().accounts.map(a => { const c = H.loadGuiModule(SB, 'lib/envAccounts').toContractAccount(a); delete c._index; return c })
 const readGuiSettings = () => JSON.parse(fs.readFileSync(path.join(SB, 'gui', 'gui-settings.json'), 'utf-8'))
 
 // 受限执行环境下（stdio=pipe 被拒绝）压缩/解压相关用例跳过

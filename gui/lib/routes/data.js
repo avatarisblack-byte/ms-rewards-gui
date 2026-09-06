@@ -1,12 +1,14 @@
 /**
  * 一键数据路由（GET /api/data/export、POST /api/data/import）
  * 签名：(req, res, pathname, ctx) => boolean
- * 打包/恢复 sessions + logs + accounts.json + config.json（白名单 + 防穿越 + .bak 回滚）
+ * 打包/恢复 sessions + logs + .env（账号）+ config.json（白名单 + 防穿越 + .bak 回滚）
  * sessions 双格式（2026-09-06）：v4 sessions/sessions.db（+WAL 伴生）；v3 <email>/session_*.json 回退
+ * 账号双格式（2026-09-06）：v4 .env（ACCOUNT_N_*）；v3 旧包 accounts.json 导入时自动转换为 .env
  */
 const fs = require('fs')
 const path = require('path')
 const sessionFiles = require('../sessionFiles')
+const envAccounts = require('../envAccounts')
 
 function handleData(req, res, pathname, ctx) {
     const { config, http, archive, logCache } = ctx
@@ -34,8 +36,9 @@ function handleData(req, res, pathname, ctx) {
                     }
                 }
 
-                const accountsPath = config.resolveAccountsPath()
-                if (fs.existsSync(accountsPath)) fs.copyFileSync(accountsPath, path.join(stageDir, 'accounts.json'))
+                // v4 账号来源是 .env（accounts.json 已不被 V4-china 读取）——打包 .env 供恢复/迁移
+                const envPath = envAccounts.envFilePath()
+                if (fs.existsSync(envPath)) fs.copyFileSync(envPath, path.join(stageDir, '.env'))
 
                 const configPath = config.resolveConfigPath()
                 if (fs.existsSync(configPath)) fs.copyFileSync(configPath, path.join(stageDir, 'config.json'))
@@ -127,11 +130,31 @@ function handleData(req, res, pathname, ctx) {
                             imported.logs++
                             continue
                         }
-                        if (norm === 'accounts.json') {
-                            const targetFile = config.resolveAccountsPath()
+                        // v4 账号包：.env 整体恢复（覆盖账号段 + 非账号行，与 v3 accounts.json 的覆盖语义一致）
+                        if (norm === '.env') {
+                            const targetFile = envAccounts.envFilePath()
                             backupFile(targetFile)
                             fs.copyFileSync(full, targetFile)
                             imported.accounts++
+                            continue
+                        }
+                        // v3 旧数据包：accounts.json 转换为 .env 账号段（保留现有 .env 的非账号行）
+                        if (norm === 'accounts.json') {
+                            const migrated = envAccounts.accountsJsonToContract(
+                                fs.readFileSync(full, 'utf-8')
+                            )
+                            if (migrated.length) {
+                                const targetFile = envAccounts.envFilePath()
+                                backupFile(targetFile)
+                                const current = envAccounts.parseEnvAccounts(
+                                    fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf-8') : ''
+                                )
+                                envAccounts.writeEnvAccounts(
+                                    migrated.map(a => ({ index: '', ...a })),
+                                    current.otherLines
+                                )
+                                imported.accounts++
+                            }
                             continue
                         }
                         if (norm === 'config.json') {
@@ -147,7 +170,7 @@ function handleData(req, res, pathname, ctx) {
                 if (tmpRoot) { try { fs.rmSync(tmpRoot, { recursive: true, force: true }) } catch {} ; tmpRoot = null }
 
                 const total = imported.sessions + imported.logs + imported.accounts + imported.config
-                if (!total) return http.sendJson(res, 400, { error: '压缩包内未找到可导入的数据（需为 gui-data 导出格式或含 sessions/logs/accounts.json/config.json）' })
+                if (!total) return http.sendJson(res, 400, { error: '压缩包内未找到可导入的数据（需为 gui-data 导出格式或含 sessions/logs/.env/config.json，旧包 accounts.json 亦可）' })
                 // 日志文件可能已变更：主动失效分析缓存，确保下次请求重建摘要
                 if (imported.logs > 0) logCache.invalidateCache()
                 console.log(`[GUI] 数据导入完成: sessions=${imported.sessions} logs=${imported.logs} accounts=${imported.accounts} config=${imported.config}`)

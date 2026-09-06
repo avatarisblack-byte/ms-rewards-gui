@@ -29,7 +29,12 @@ let routeSystem = null
 
 const ACCOUNTS = () => path.join(SB, 'accounts.json')
 const CONFIG = () => path.join(SB, 'config.json')
+// v4 账号来源是 .env（gui-v4-api 起账号路由读写它）；accounts.json 仅保留供旧包迁移用例
+const ENVP = () => path.join(SB, '.env')
+const writeEnv = accounts => fs.writeFileSync(ENVP(), H.fixtureEnvContent(accounts), 'utf-8')
 const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+const readEnvAccounts = () => H.loadGuiModule(SB, 'lib/envAccounts').readEnvFile().accounts.map(a => { const c = H.loadGuiModule(SB, 'lib/envAccounts').toContractAccount(a); delete c._index; return c })
 
 function mockRes() {
     return {
@@ -106,14 +111,15 @@ describe('R-X 脏数据下的异常逃逸（逃逸 = 真实运行中 GUI 进程�
         }
     })
 
-    test('R-X04 accounts.json 为损坏 JSON 时返回 500 且不抛异常（既有容错正确性）', () => {
-        fs.writeFileSync(ACCOUNTS(), '{ broken json', 'utf-8')
+    test('R-X04 .env 为无法解析的垃圾内容时 GET /api/accounts 降级为空列表且不抛异常', () => {
+        fs.writeFileSync(ENVP(), ' binary garbage ', 'utf-8')
         const res = mockRes()
         try {
             assert.doesNotThrow(() => routeAccounts({ method: 'GET' }, res, '/api/accounts', ctx))
-            assert.strictEqual(res.statusCode, 500)
+            assert.strictEqual(res.statusCode, 200)
+            assert.deepStrictEqual(JSON.parse(res.body).accounts, [])
         } finally {
-            goodAccounts()
+            writeEnv([H.fixtureAccount()])
         }
     })
 
@@ -133,26 +139,28 @@ describe('R-X 脏数据下的异常逃逸（逃逸 = 真实运行中 GUI 进程�
 
 // ============ 服务端错误场景的 HTTP 容错 ============
 describe('R-E 服务端错误场景容错', () => {
-    test('R-E01 accounts.json 非数组时 POST 返回 500 且服务存活', async () => {
-        const backup = fs.readFileSync(ACCOUNTS(), 'utf-8')
-        fs.writeFileSync(ACCOUNTS(), JSON.stringify({ not: 'array' }), 'utf-8')
+    test('R-E01 .env 损坏时 POST 仍可写入（损坏内容降级为空集后自愈）且服务存活', async () => {
+        const backup = fs.readFileSync(ENVP(), 'utf-8')
+        fs.writeFileSync(ENVP(), 'broken binary  content', 'utf-8')
         try {
             const r = await H.request(BASE, '/api/accounts', { method: 'POST', json: { email: 'x@y.com', password: 'p' } })
-            assert.strictEqual(r.status, 500)
-            assert.match(r.json.error, /格式异常/)
+            assert.strictEqual(r.status, 200)
+            assert.strictEqual(readEnvAccounts().some(a => a.email === 'x@y.com'), true, '损坏后新增账号未落盘')
         } finally {
-            fs.writeFileSync(ACCOUNTS(), backup, 'utf-8')
+            fs.writeFileSync(ENVP(), backup, 'utf-8')
         }
     })
 
-    test('R-E02 accounts.json 非数组时 DELETE 返回 500 且服务存活', async () => {
-        const backup = fs.readFileSync(ACCOUNTS(), 'utf-8')
-        fs.writeFileSync(ACCOUNTS(), JSON.stringify({ not: 'array' }), 'utf-8')
+    test('R-E02 .env 损坏时 DELETE 返回 404 且服务存活', async () => {
+        const backup = fs.readFileSync(ENVP(), 'utf-8')
+        fs.writeFileSync(ENVP(), 'broken binary  content', 'utf-8')
         try {
             const r = await H.request(BASE, '/api/accounts/x%40y.com', { method: 'DELETE' })
-            assert.strictEqual(r.status, 500)
+            assert.strictEqual(r.status, 404)
+            const alive = await H.request(BASE, '/api/task')
+            assert.strictEqual(alive.status, 200)
         } finally {
-            fs.writeFileSync(ACCOUNTS(), backup, 'utf-8')
+            fs.writeFileSync(ENVP(), backup, 'utf-8')
         }
     })
 
@@ -192,15 +200,15 @@ describe('R-E 服务端错误场景容错', () => {
         }
     })
 
-    test('R-E05 空 accounts.json 数组时 GET /api/accounts 正常返回空列表', async () => {
-        const backup = fs.readFileSync(ACCOUNTS(), 'utf-8')
-        fs.writeFileSync(ACCOUNTS(), '[]', 'utf-8')
+    test('R-E05 .env 无账号行时 GET /api/accounts 正常返回空列表', async () => {
+        const backup = fs.readFileSync(ENVP(), 'utf-8')
+        fs.writeFileSync(ENVP(), '# GUI_OTHER_SETTING=x\n', 'utf-8')
         try {
             const r = await H.request(BASE, '/api/accounts')
             assert.strictEqual(r.status, 200)
             assert.deepStrictEqual(r.json.accounts, [])
         } finally {
-            fs.writeFileSync(ACCOUNTS(), backup, 'utf-8')
+            fs.writeFileSync(ENVP(), backup, 'utf-8')
         }
     })
 })

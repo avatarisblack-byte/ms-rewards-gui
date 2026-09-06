@@ -1,10 +1,14 @@
 /**
  * 账号路由（GET/POST /api/accounts、PUT/DELETE /api/accounts/:email）
+ * v4 适配（2026-09-06）：V4-china 不再读 accounts.json，账号唯一来源是 .env 的 ACCOUNT_N_*
+ * 环境变量——读写目标改为 lib/envAccounts.js（.env），API 契约（响应结构/脱敏/占位符保护）
+ * 与 v3 保持一致，前端零改动。
  * 签名：(req, res, pathname, ctx) => boolean
  */
 const fs = require('fs')
 const path = require('path')
 const cleanup = require('../cleanup')
+const envAccounts = require('../envAccounts')
 
 function buildNewAccount(body) {
     return {
@@ -25,43 +29,44 @@ function buildNewAccount(body) {
 
 // 备份 .bak → 写回；失败自动恢复
 // 备份轮转（2026-08-21）：写前把旧 .bak 轮转为带时间戳的历史备份（保留最近 5 个）
-function backupAndWrite(accountsPath, nextAccounts, res, http, onOk) {
-    const backupPath = accountsPath + '.bak'
-    cleanup.rotateBackup(accountsPath)
-    try { fs.copyFileSync(accountsPath, backupPath) } catch (e) {
-        http.sendJson(res, 500, { error: `备份 accounts.json 失败: ${e.message}` }); return
+function backupAndWrite(nextAccounts, otherLines, res, http, onOk) {
+    const envPath = envAccounts.envFilePath()
+    // 文件不存在（首次添加）时无需备份
+    if (fs.existsSync(envPath)) {
+        cleanup.rotateBackup(envPath)
+        try { fs.copyFileSync(envPath, envPath + '.bak') } catch (e) {
+            http.sendJson(res, 500, { error: `备份 .env 失败: ${e.message}` }); return
+        }
     }
+    let written
     try {
-        fs.writeFileSync(accountsPath, JSON.stringify(nextAccounts, null, 4) + '\n', 'utf-8')
+        written = envAccounts.writeEnvAccounts(nextAccounts, otherLines)
     } catch (e) {
-        try { fs.copyFileSync(backupPath, accountsPath) } catch {}
-        http.sendJson(res, 500, { error: `写入 accounts.json 失败: ${e.message}` }); return
+        const backupPath = envPath + '.bak'
+        if (fs.existsSync(backupPath)) { try { fs.copyFileSync(backupPath, envPath) } catch {} }
+        http.sendJson(res, 500, { error: `写入 .env 失败: ${e.message}` }); return
     }
-    http.sendJson(res, 200, onOk(backupPath))
+    http.sendJson(res, 200, onOk(path.basename(written)))
 }
 
 function handleAccounts(req, res, pathname, ctx) {
-    const { config, http, validator } = ctx
+    const { http, validator } = ctx
     const accMatch = pathname.match(/^\/api\/accounts\/([^/]+)$/)
 
     // GET /api/accounts（关联日志摘要：从预生成缓存读取，避免每次全量扫描原始日志）
     if (pathname === '/api/accounts' && req.method === 'GET') {
-        const accounts = config.readJson(config.resolveAccountsPath())
-        if (!accounts) { http.sendJson(res, 500, { error: '无法读取 accounts.json' }); return true }
-        // 脏数据防御（2026-08-20）：非数组内容、缺失/非字符串 email 曾使下方 map 抛 TypeError，
-        // 异常逃逸到 server 分发层会终止整个 GUI 进程
-        if (!Array.isArray(accounts)) {
-            http.sendJson(res, 500, { error: 'accounts.json 内容格式异常（应为数组）' }); return true
-        }
+        const { accounts } = envAccounts.readEnvFile()
+        // .env 不存在/无账号返回空列表（v4 可从零开始配置，不再像 accounts.json 时代报 500）
         const logSummary = ctx.logCache.getCachedData().accountSummary
         const logMap = {}
         for (const s of logSummary) logMap[s.account] = s
         // 凭据脱敏（2026-08-21）：password/totpSecret 原样下发会让任意能访问本机的进程/网页
         // 读走全部账号凭据；列表渲染只需要邮箱与运行状态，密码一律显示为 ******。
         const enriched = accounts.map(a => {
-            const user = (typeof a?.email === 'string' ? a.email : '').split('@')[0]
+            const contract = envAccounts.toContractAccount(a)
+            const user = (typeof contract.email === 'string' ? contract.email : '').split('@')[0]
             return {
-                ...a,
+                ...contract,
                 password: '******',
                 totpSecret: '******',
                 status: logMap[user] || { account: user, entries: 0 }
@@ -90,17 +95,13 @@ function handleAccounts(req, res, pathname, ctx) {
                 if (validationError) {
                     return http.sendJson(res, 400, { error: `账号格式校验失败: ${validationError}` })
                 }
-                const accountsPath = config.resolveAccountsPath()
-                const accounts = config.readJson(accountsPath)
-                if (!Array.isArray(accounts)) {
-                    return http.sendJson(res, 500, { error: 'accounts.json 内容格式异常（应为数组）' })
-                }
+                const { accounts, otherLines } = envAccounts.readEnvFile()
                 if (accounts.some(a => a.email === newAccount.email)) {
                     return http.sendJson(res, 400, { error: `账号已存在: ${newAccount.email}` })
                 }
-                accounts.push(newAccount)
-                backupAndWrite(accountsPath, accounts, res, http, backupPath => ({
-                    success: true, message: `账号 ${newAccount.email} 已添加`, backup: path.basename(backupPath), account: newAccount
+                accounts.push({ index: String(accounts.length + 1), ...newAccount })
+                backupAndWrite(accounts, otherLines, res, http, backup => ({
+                    success: true, message: `账号 ${newAccount.email} 已添加（写入 .env）`, backup, account: newAccount
                 }))
             } catch (error) {
                 return http.sendJson(res, 400, { error: error.message || '无效请求' })
@@ -113,17 +114,14 @@ function handleAccounts(req, res, pathname, ctx) {
         return (async () => {
             try {
                 const targetEmail = decodeURIComponent(accMatch[1])
-                const accountsPath = config.resolveAccountsPath()
-                const accounts = config.readJson(accountsPath)
-                if (!Array.isArray(accounts)) {
-                    return http.sendJson(res, 500, { error: 'accounts.json 内容格式异常（应为数组）' })
-                }
+                const { accounts, otherLines } = envAccounts.readEnvFile()
                 const idx = accounts.findIndex(a => a.email === targetEmail)
                 if (idx === -1) { return http.sendJson(res, 404, { error: `未找到账号: ${targetEmail}` }) }
-                const removed = accounts[idx]
+                const removed = envAccounts.toContractAccount(accounts[idx])
+                delete removed._index
                 accounts.splice(idx, 1)
-                backupAndWrite(accountsPath, accounts, res, http, backupPath => ({
-                    success: true, message: `账号 ${targetEmail} 已删除`, backup: path.basename(backupPath), account: removed
+                backupAndWrite(accounts, otherLines, res, http, backup => ({
+                    success: true, message: `账号 ${targetEmail} 已删除`, backup, account: removed
                 }))
             } catch (error) {
                 return http.sendJson(res, 400, { error: error.message || '无效请求' })
@@ -147,11 +145,7 @@ function handleAccounts(req, res, pathname, ctx) {
                 if (validationError) {
                     return http.sendJson(res, 400, { error: `账号格式校验失败: ${validationError}` })
                 }
-                const accountsPath = config.resolveAccountsPath()
-                const accounts = config.readJson(accountsPath)
-                if (!Array.isArray(accounts)) {
-                    return http.sendJson(res, 500, { error: 'accounts.json 内容格式异常（应为数组）' })
-                }
+                const { accounts, otherLines } = envAccounts.readEnvFile()
                 const idx = accounts.findIndex(a => a.email === targetEmail)
                 if (idx === -1) { return http.sendJson(res, 404, { error: `未找到账号: ${targetEmail}` }) }
                 // 脱敏占位保护（2026-08-21）：GET 返回的 password/totpSecret 是 '******'，
@@ -160,9 +154,11 @@ function handleAccounts(req, res, pathname, ctx) {
                 const mergedBody = { ...body }
                 if (mergedBody.password === '******') delete mergedBody.password
                 if (mergedBody.totpSecret === '******') delete mergedBody.totpSecret
-                accounts[idx] = { ...accounts[idx], ...mergedBody }
-                backupAndWrite(accountsPath, accounts, res, http, backupPath => ({
-                    success: true, message: `账号 ${targetEmail} 配置已保存`, backup: path.basename(backupPath), account: accounts[idx]
+                const current = envAccounts.toContractAccount(accounts[idx])
+                delete current._index
+                accounts[idx] = { index: accounts[idx].index, ...current, ...mergedBody }
+                backupAndWrite(accounts, otherLines, res, http, backup => ({
+                    success: true, message: `账号 ${targetEmail} 配置已保存`, backup, account: envAccounts.toContractAccount(accounts[idx])
                 }))
             } catch (error) {
                 return http.sendJson(res, 400, { error: error.message || '无效请求' })

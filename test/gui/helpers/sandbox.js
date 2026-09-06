@@ -68,6 +68,32 @@ function fixtureAccount(email = 'tester.a@example.com') {
     }
 }
 
+/** 账号数组 → .env 文本（与 envAccounts.serializeAccounts 同构的夹具；字段对齐 env.example/Load.ts） */
+function fixtureEnvContent(accounts) {
+    const lines = ['# GUI 测试沙箱 .env（非账号行，写入时应保留）']
+    accounts.forEach((a, i) => {
+        const n = i + 1
+        const p = a.proxy || {}
+        const sf = a.saveFingerprint || {}
+        lines.push(
+            `ACCOUNT_${n}_EMAIL=${a.email}`,
+            `ACCOUNT_${n}_PASSWORD=${a.password}`,
+            `ACCOUNT_${n}_TOTP_SECRET=${a.totpSecret || ''}`,
+            `ACCOUNT_${n}_RECOVERY_EMAIL=${a.recoveryEmail || ''}`,
+            `ACCOUNT_${n}_GEO_LOCALE=${a.geoLocale}`,
+            `ACCOUNT_${n}_LANG_CODE=${a.langCode}`,
+            `ACCOUNT_${n}_PROXY_HTTP=${p.proxyHttp ? 'true' : 'false'}`,
+            `ACCOUNT_${n}_PROXY_URL=${p.url || ''}`,
+            `ACCOUNT_${n}_PROXY_PORT=${p.port || 0}`,
+            `ACCOUNT_${n}_PROXY_USERNAME=${p.username || ''}`,
+            `ACCOUNT_${n}_PROXY_PASSWORD=${p.password || ''}`,
+            `ACCOUNT_${n}_SAVE_FINGERPRINT_MOBILE=${sf.mobile !== false}`,
+            `ACCOUNT_${n}_SAVE_FINGERPRINT_DESKTOP=${sf.desktop !== false}`,
+        )
+    })
+    return lines.join('\n') + '\n'
+}
+
 /** 单行日志构造（v3 格式：utc [local] [account] [level] platform [event] message） */
 function logLine(utc, account, level, platform, event, message) {
     const d = new Date(utc)
@@ -186,6 +212,9 @@ function createSandbox(tag) {
     const accounts = [fixtureAccount()]
     fs.writeFileSync(path.join(root, 'accounts.json'), JSON.stringify(accounts, null, 4) + '\n', 'utf-8')
     fs.writeFileSync(path.join(root, 'src', 'accounts.example.json'), JSON.stringify(accounts, null, 4) + '\n', 'utf-8')
+
+    // v4 账号来源是 .env（ACCOUNT_N_*，gui-v4-api 起账号路由读写此文件）；accounts.json 仅保留供旧包迁移用例
+    fs.writeFileSync(path.join(root, '.env'), fixtureEnvContent(accounts), 'utf-8')
 
     writeLogFixtures(path.join(root, 'logs'))
     return root
@@ -382,6 +411,7 @@ module.exports = {
     FIXTURE_EXPECT,
     fixtureConfig,
     fixtureAccount,
+    fixtureEnvContent,
     logLine,
     logLineV4,
     writeLogFixtures,
