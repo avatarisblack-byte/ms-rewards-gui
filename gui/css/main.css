@@ -132,6 +132,19 @@
         border-color: #9ca3af;
     }
 }
+
+/* 环境已安装（2026-09-06）：绿色就绪态，静态呈现不附加动画；保留可点击（查看环境详情） */
+.btn-installed {
+    background-color: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+@media (hover: hover) and (pointer: fine) {
+    .btn-installed:hover {
+        background-color: #dcfce7;
+        border-color: #4ade80;
+    }
+}
 .btn-secondary:active {
     background-color: #f3f4f6;
 }

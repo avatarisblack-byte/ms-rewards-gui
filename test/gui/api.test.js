@@ -678,6 +678,31 @@ describe('I-Y 系统接口', () => {
         assert.match(r.json.error, /setup\.bat/)
     })
 
+    test('I-Y06 GET /api/setup/status 环境就绪检测随 node_modules/dist 实时翻转', async () => {
+        // 沙箱初始无 node_modules/dist → deps/build 为 false，installed 不可能为 true
+        const before = await H.request(BASE, '/api/setup/status')
+        assert.strictEqual(before.status, 200)
+        for (const k of ['deps', 'browser', 'build', 'envFile', 'installed']) {
+            assert.strictEqual(typeof before.json[k], 'boolean', `字段 ${k} 缺失或非布尔`)
+        }
+        assert.strictEqual(before.json.deps, false)
+        assert.strictEqual(before.json.build, false)
+        assert.strictEqual(before.json.installed, false)
+        // browser 检测的是真实用户缓存（测试机可能已装），只断言与 installed 的组合一致性
+        assert.strictEqual(before.json.installed, before.json.deps && before.json.browser && before.json.build)
+
+        // 构造假 node_modules/patchright 与 dist/index.js → deps/build 翻转、installed 跟随
+        fs.mkdirSync(path.join(SB, 'node_modules', 'patchright'), { recursive: true })
+        fs.mkdirSync(path.join(SB, 'dist'), { recursive: true })
+        fs.writeFileSync(path.join(SB, 'dist', 'index.js'), '// fake build')
+        const after = await H.request(BASE, '/api/setup/status')
+        assert.strictEqual(after.status, 200)
+        assert.strictEqual(after.json.deps, true, '构造 node_modules/patchright 后 deps 未翻转')
+        assert.strictEqual(after.json.build, true, '构造 dist/index.js 后 build 未翻转')
+        assert.strictEqual(after.json.installed, after.json.deps && after.json.browser && after.json.build,
+            'installed 应等于 deps && browser && build')
+    })
+
     test('I-Y05 /api/setup 注入剔除 allow-scripts 的干净 userconfig【期望依据：用户级 .npmrc 的 allow-scripts 会让 setup.bat 嵌套 npm i 报 EALLOWSCRIPTS，GUI 侧注入 NPM_CONFIG_USERCONFIG 规避且不改上游文件】', () => {
         const src = fs.readFileSync(path.join(SB, 'gui', 'lib', 'routes', 'system.js'), 'utf-8')
         assert.match(src, /NPM_CONFIG_USERCONFIG/, '未发现注入干净 userconfig 的逻辑')

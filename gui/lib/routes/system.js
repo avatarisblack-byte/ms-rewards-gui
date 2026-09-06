@@ -15,6 +15,45 @@ const { spawn } = require('child_process')
 // 改为：keepalive 断开仅记日志，服务常驻；停止方式仅剩 /api/shutdown、stop-gui.bat、Ctrl+C。
 let activeKeepaliveConnections = 0 // 当前活跃的 keepalive 连接数（支持多标签页，仅用于日志）
 
+// ===== 环境就绪检测（2026-09-06）：供前端把「安装环境」按钮切换为「✓ 环境已安装」 =====
+// 实质判据（比 setup.bat 留标记更可靠：手动 npm i / 手动构建同样能达成）：
+//   deps    = node_modules/patchright 存在（核心依赖代表）
+//   browser = patchright 浏览器缓存存在 chromium* 目录
+//   build   = dist/index.js 存在（v4 runCommand 的首选入口）
+//   envFile = 根目录 .env 存在（账号配置；不属于 installed，用于「下一步配账号」提示）
+// 只读 fs 检测，幂等，与运行中任务零冲突。
+function browserCacheCandidates() {
+    const list = []
+    if (process.env.PLAYWRIGHT_BROWSERS_PATH) list.push(process.env.PLAYWRIGHT_BROWSERS_PATH)
+    if (process.platform === 'win32') {
+        list.push(path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'ms-playwright'))
+    } else if (process.platform === 'darwin') {
+        list.push(path.join(os.homedir(), 'Library', 'Caches', 'ms-playwright'))
+    } else {
+        list.push(path.join(os.homedir(), '.cache', 'ms-playwright'))
+    }
+    return list
+}
+
+function detectBrowserInstalled() {
+    for (const dir of browserCacheCandidates()) {
+        try {
+            if (!fs.existsSync(dir)) continue
+            // patchright install chromium 同时安装 chromium 与 chromium_headless_shell，任一存在即视为已装
+            if (fs.readdirSync(dir).some(name => name.startsWith('chromium'))) return true
+        } catch { /* 目录不可读按未安装处理 */ }
+    }
+    return false
+}
+
+function getEnvStatus(root) {
+    const deps = fs.existsSync(path.join(root, 'node_modules', 'patchright'))
+    const browser = detectBrowserInstalled()
+    const build = fs.existsSync(path.join(root, 'dist', 'index.js'))
+    const envFile = fs.existsSync(path.join(root, '.env'))
+    return { deps, browser, build, envFile, installed: deps && browser && build }
+}
+
 function handleSystem(req, res, pathname, ctx) {
     const { http, logCache } = ctx
 
@@ -80,6 +119,12 @@ function handleSystem(req, res, pathname, ctx) {
             http.sendJson(res, 500, { error: `启动 setup 失败: ${e.message}` })
             return true
         }
+    }
+
+    // GET /api/setup/status（环境就绪检测：只读、幂等，前端据此切换按钮形态）
+    if (pathname === '/api/setup/status' && req.method === 'GET') {
+        http.sendJson(res, 200, getEnvStatus(ctx.config.ROOT))
+        return true
     }
 
     // GET /api/stats | /api/summary（日志统计摘要：读预生成缓存，新鲜则零解析成本）

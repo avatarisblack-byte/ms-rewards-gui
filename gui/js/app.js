@@ -917,9 +917,83 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
                 alert(`✅ ${data.message}\n\n请在独立窗口观察进度，完成前请勿重复点击。`);
+                pollEnvStatusUntilInstalled(); // 安装完成后按钮自动切换「✓ 环境已安装」
             } catch (e) {
                 alert(`❌ 启动失败: ${e.message}`);
             }
+        }
+
+        // ===== 环境就绪状态（2026-09-06）：已安装时按钮切换为「✓ 环境已安装」（绿色就绪态） =====
+        // 状态来自 GET /api/setup/status 的实时检测（依赖/浏览器内核/构建产物），非一次性缓存：
+        // 手动 npm i、手动删除 node_modules 后刷新页面，按钮形态都会如实跟随。
+        let envStatusCache = null;
+        let envStatusPollTimer = null;
+
+        async function refreshEnvStatus() {
+            try {
+                const res = await apiFetch('/api/setup/status');
+                if (!res.ok) return null;
+                envStatusCache = await res.json();
+                renderEnvSetupButton();
+                return envStatusCache;
+            } catch {
+                return null; // 状态接口失败不阻塞页面，按钮保持默认「安装环境」
+            }
+        }
+
+        function renderEnvSetupButton() {
+            const btn = document.getElementById('btn-env-setup');
+            const label = document.getElementById('env-setup-label');
+            if (!btn || !envStatusCache) return;
+            if (envStatusCache.installed) {
+                btn.classList.remove('btn-secondary');
+                btn.classList.add('btn-installed');
+                btn.title = '环境已就绪（依赖 / 浏览器内核 / 构建产物齐全）。点击查看详情。';
+                if (label) label.textContent = '✓ 环境已安装';
+                btn.onclick = showEnvStatusModal;
+            } else {
+                btn.classList.add('btn-secondary');
+                btn.classList.remove('btn-installed');
+                btn.title = '运行根目录 setup 程序（安装依赖 / 构建环境）';
+                if (label) label.textContent = '安装环境';
+                btn.onclick = setupEnvironment;
+            }
+        }
+
+        // 环境详情弹窗：各项检测状态（✓/✗）
+        function showEnvStatusModal() {
+            if (!envStatusCache) return;
+            const items = [
+                ['npm 依赖（node_modules/patchright）', envStatusCache.deps],
+                ['浏览器内核（patchright chromium）', envStatusCache.browser],
+                ['构建产物（dist/index.js）', envStatusCache.build],
+                ['账号配置（.env）', envStatusCache.envFile],
+            ];
+            const list = document.getElementById('env-status-list');
+            if (list) {
+                list.innerHTML = items.map(([name, ok]) => `
+                    <li class="flex items-center justify-between">
+                        <span class="text-gray-700">${name}</span>
+                        <span class="font-semibold ${ok ? 'text-green-600' : 'text-red-500'}">${ok ? '✓ 就绪' : '✗ 未就绪'}</span>
+                    </li>`).join('');
+            }
+            openModal('modal-env-status');
+        }
+
+        // setup.bat 为独立异步窗口，完成后无回调——轮询状态直至就绪（10s 间隔，上限 15 分钟后放弃）
+        function pollEnvStatusUntilInstalled() {
+            if (envStatusPollTimer) clearInterval(envStatusPollTimer);
+            const startedAt = Date.now();
+            envStatusPollTimer = setInterval(async () => {
+                const st = await refreshEnvStatus();
+                if (st && st.installed) {
+                    clearInterval(envStatusPollTimer);
+                    envStatusPollTimer = null;
+                } else if (Date.now() - startedAt > 15 * 60 * 1000) {
+                    clearInterval(envStatusPollTimer);
+                    envStatusPollTimer = null;
+                }
+            }, 10000);
         }
 
         // ===== 导入 Session 压缩包 =====
@@ -1581,9 +1655,12 @@
                     else localStorage.removeItem(ENV_SETUP_DISMISS_KEY);
                 });
             }
-            if (!localStorage.getItem(ENV_SETUP_DISMISS_KEY)) {
-                openModal('modal-env-setup');
-            }
+            // 环境已就绪时按钮自动切换「✓ 环境已安装」并跳过提示弹窗；未就绪才按"不再提示"开关弹窗
+            refreshEnvStatus().then(st => {
+                if (st && !st.installed && !localStorage.getItem(ENV_SETUP_DISMISS_KEY)) {
+                    openModal('modal-env-setup');
+                }
+            });
 
             // 初始化时拉取任务状态（若服务端已有子进程在跑则显示运行中）
             pollTaskStatus();
