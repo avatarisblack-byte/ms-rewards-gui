@@ -569,6 +569,39 @@ describe('I-D 数据与 Session 接口', () => {
         fs.rmSync(outDir, { recursive: true, force: true })
     })
 
+    test('I-D09 一键导入 v3 会话包后自动迁移进 sessions.db', async t => {
+        if (!archiveSpawnable) return t.skip('当前执行环境禁止子进程管道（EPERM），跳过压缩相关用例')
+        // I-D06 导入的占位 sessions.db（非 SQLite 文本）会残留到本用例，先清除再验证迁移
+        fs.rmSync(path.join(SB, 'sessions', 'sessions.db'), { force: true })
+        const cookies = [{ name: 'SES2', value: 'v2', domain: '.live.com' }]
+        const zip = H.makeZip([
+            { name: 'sessions/old.user@test.com/session_desktop.json', data: JSON.stringify(cookies) },
+            { name: 'sessions/old.user@test.com/session_fingerprint_desktop.json', data: JSON.stringify({ fingerprint: {}, headers: {} }) },
+        ])
+        const r = await H.request(BASE, '/api/data/import', { method: 'POST', json: { filename: 'd2.zip', dataBase64: zip.toString('base64') } })
+        assert.strictEqual(r.status, 200, `导入失败: ${JSON.stringify(r.json)}`)
+        assert.match(r.json.message, /迁移/)
+        const { DatabaseSync } = require('node:sqlite')
+        const db = new DatabaseSync(path.join(SB, 'sessions', 'sessions.db'))
+        try {
+            const row = db.prepare('SELECT storage_state FROM sessions WHERE email = ? AND platform = ?').get('old.user@test.com', 'desktop')
+            assert.ok(row, '迁移行缺失')
+            assert.deepStrictEqual(JSON.parse(row.storage_state), { cookies, origins: [] })
+        } finally { db.close() }
+    })
+
+    test('I-D10 数据导入的账号计数按实际账号数（.env 含 2 账号 → accounts=2）', async t => {
+        if (!archiveSpawnable) return t.skip('当前执行环境禁止子进程管道（EPERM），跳过压缩相关用例')
+        const envText = [
+            'ACCOUNT_1_EMAIL=a@test.com', 'ACCOUNT_1_PASSWORD=p1',
+            'ACCOUNT_2_EMAIL=b@test.com', 'ACCOUNT_2_PASSWORD=p2',
+        ].join('\n') + '\n'
+        const zip = H.makeZip([{ name: '.env', data: envText }])
+        const r = await H.request(BASE, '/api/data/import', { method: 'POST', json: { filename: 'e.zip', dataBase64: zip.toString('base64') } })
+        assert.strictEqual(r.status, 200, `导入失败: ${JSON.stringify(r.json)}`)
+        assert.strictEqual(r.json.imported.accounts, 2, '账号计数应为解析出的账号数而非文件数（旧版恒为 1，弹窗误导）')
+    })
+
     test('I-D08 一键数据导入兼容 v4 sessions.db', async t => {
         if (!archiveSpawnable) return t.skip('当前执行环境禁止子进程管道（EPERM），跳过压缩相关用例')
         const zip = H.makeZip([

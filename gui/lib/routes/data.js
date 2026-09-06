@@ -9,6 +9,7 @@ const fs = require('fs')
 const path = require('path')
 const sessionFiles = require('../sessionFiles')
 const envAccounts = require('../envAccounts')
+const sessionMigrate = require('../sessionMigrate')
 
 function handleData(req, res, pathname, ctx) {
     const { config, http, archive, logCache } = ctx
@@ -130,12 +131,13 @@ function handleData(req, res, pathname, ctx) {
                             imported.logs++
                             continue
                         }
-                        // v4 账号包：.env 整体恢复（覆盖账号段 + 非账号行，与 v3 accounts.json 的覆盖语义一致）
+                        // v4 账号包：.env 整体恢复（覆盖账号段 + 非账号行，与 v3 accounts.json 的覆盖语义一致）；
+                        // 计数按解析出的实际账号数（前端弹窗展示"账号: N"，文件计数恒为 1 会误导）
                         if (norm === '.env') {
                             const targetFile = envAccounts.envFilePath()
                             backupFile(targetFile)
                             fs.copyFileSync(full, targetFile)
-                            imported.accounts++
+                            imported.accounts = envAccounts.parseEnvAccounts(fs.readFileSync(targetFile, 'utf-8')).accounts.length
                             continue
                         }
                         // v3 旧数据包：accounts.json 转换为 .env 账号段（保留现有 .env 的非账号行）
@@ -149,11 +151,8 @@ function handleData(req, res, pathname, ctx) {
                                 const current = envAccounts.parseEnvAccounts(
                                     fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf-8') : ''
                                 )
-                                envAccounts.writeEnvAccounts(
-                                    migrated.map(a => ({ index: '', ...a })),
-                                    current.otherLines
-                                )
-                                imported.accounts++
+                                envAccounts.writeEnvAccounts(migrated, current.otherLines)
+                                imported.accounts = migrated.length
                             }
                             continue
                         }
@@ -169,12 +168,21 @@ function handleData(req, res, pathname, ctx) {
                 scanDir(extractDir, '')
                 if (tmpRoot) { try { fs.rmSync(tmpRoot, { recursive: true, force: true }) } catch {} ; tmpRoot = null }
 
+                // v3 json 会话迁移进 v4 sessions.db（v4 只读 db；不迁移则导入的会话不生效、走密码登录）
+                let migrateNote = ''
+                try {
+                    const { migrated } = sessionMigrate.migrateV3JsonToDb()
+                    if (migrated) migrateNote = `，已迁移 ${migrated} 条会话到 v4 会话库`
+                } catch (e) {
+                    migrateNote = `（v4 会话库迁移失败: ${e.message}）`
+                }
+
                 const total = imported.sessions + imported.logs + imported.accounts + imported.config
                 if (!total) return http.sendJson(res, 400, { error: '压缩包内未找到可导入的数据（需为 gui-data 导出格式或含 sessions/logs/.env/config.json，旧包 accounts.json 亦可）' })
                 // 日志文件可能已变更：主动失效分析缓存，确保下次请求重建摘要
                 if (imported.logs > 0) logCache.invalidateCache()
-                console.log(`[GUI] 数据导入完成: sessions=${imported.sessions} logs=${imported.logs} accounts=${imported.accounts} config=${imported.config}`)
-                return http.sendJson(res, 200, { success: true, message: '数据导入完成', imported })
+                console.log(`[GUI] 数据导入完成: sessions=${imported.sessions} logs=${imported.logs} accounts=${imported.accounts} config=${imported.config}${migrateNote}`)
+                return http.sendJson(res, 200, { success: true, message: `数据导入完成${migrateNote}`, imported })
             } catch (error) {
                 for (const target of backups) { try { fs.copyFileSync(target + '.bak', target) } catch {} }
                 if (tmpRoot) { try { fs.rmSync(tmpRoot, { recursive: true, force: true }) } catch {} }

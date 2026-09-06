@@ -32,6 +32,7 @@
 | ~~`gui/lib/taskManager.js`~~ | （已删除，2026-09-06 方案 C：子进程 spawn/kill/节流状态机不再维护，进程管理统一交给上游 scripts/api/processManager.js；历史实现见 git 历史 gui-config-editor 分支） |
 | `gui/lib/logCache.js` | 日志摘要缓存：getCachedData / generateCache / isCacheFresh / invalidateCache，缓存文件 `gui/cache/account-summary.json`；用「文件名+大小+mtime」集合快照判定新鲜度（导入的 zip 解压会保留旧 mtime，单一"最新 mtime"判定会漏掉新导入日志），tmp+rename 原子写入；读取/重建异常降级为空摘要（缓存是性能优化，不应成为可用性单点）（2026-08-19 新增 / 2026-08-20 补异常兜底）；generateCache 后惰性清理 7 天前残留缓存文件（2026-08-21） |
 | `gui/lib/sessionFiles.js` | Session 文件收集/恢复（2026-09-06 新增）：v4 会话为 <根>/sessions/sessions.db（SQLite+WAL，SessionStore.ts 以 cwd+sessionPath 解析），v3 为 <email>/session_*.json；listSessionFiles 优先收集 db 文件集、无库文件回退扫描 v3 json，resolveSessionTarget 防穿越；供 routes/sessions.js 与 routes/data.js 共用 |
+| `gui/lib/sessionMigrate.js` | v3→v4 会话迁移（2026-09-06 新增）：v3 json（纯 Cookie 数组 + 指纹文件）→ v4 sessions.db 的 StorageState `{cookies, origins:[]}` upsert（node:sqlite，建表照抄 SessionStore.ts）；sessions.js/data.js 导入 v3 会话后自动触发，不迁移则 v4 视为无会话走密码登录 |
 | `gui/lib/cleanup.js` | 备份轮转与缓存清理（2026-08-21 新增）：`rotateBackup` 把旧 `.bak` 轮转为 `.bak.<UTC时间戳>` 并每类保留最近 5 个（固定 `.bak` 会被每次写入覆盖、无轮转会无限堆积）；`pruneOldCache` 删除缓存目录 7 天前文件。清理/轮转失败仅告警，绝不影响主流程 |
 | `gui/lib/routes/static.js` | 静态页 + `/css/*` `/js/*` 分发（防路径穿越黑名单）（2026-08-18 新增） |
 | `gui/lib/routes/config.js` | 配置 CRUD：GET/PUT `/api/config`、POST `/api/config/reset`、POST `/api/config/open`（2026-08-18 新增）；合并写回时对 `current.searchSettings` 做空值保护（缺该键时读 `.chinaApi` 会抛 TypeError 使保存整体失败）（2026-08-20 修复）；顶层字段改白名单校验（`ALLOWED_TOP_LEVEL`，2026-09-06 起对齐 v4 config.example.json 的 19 个顶层键：新增 accountDelay/activities/experimental/autoClaimPunchcardRewards/contintueOnBotWarning/skipNonPointTasks，移除 baseURL；新增配置项需同步），未知字段返回 400 而非落盘污染 config.json（2026-08-20 加固）；PUT 加模块级写互斥锁 `isWriting`：写入期间到达的并发请求返回 409「系统正忙，请稍后重试」，`finally` 释放锁；readBody 后 `setImmediate` 让出事件循环，保证同一批并发请求先完成锁检查（本地回环小请求体同包缓冲时若不让出，前一请求会在后一请求回调前完成并释放锁，锁形同虚设）（2026-08-21 修复）；备份前调用 `cleanup.rotateBackup` 轮转历史备份（保留最近 5 个，2026-08-21） |
@@ -248,6 +249,7 @@
 
 | 日期 | 内容 |
 |------|------|
+| 2026-09-06 | **会话迁移 + 导入计数修复**：新增 lib/sessionMigrate.js（v3 json→v4 sessions.db），导入后自动触发；导入弹窗账号计数改按实际账号数；详见 `gui/CHANGELOG.md` |
 | 2026-09-06 | **v4 日志/会话格式适配**：parseLogLine 双格式（v4 单时间戳行此前整行丢弃→统计归零）、summary/app.js ACCOUNT-END 与活动行双文案兼容（END 权威/汇总行不双计/MAIN 过滤）、Session 与一键导入导出适配 v4 sessions.db（新增 lib/sessionFiles.js），170 用例全绿；详见 `gui/CHANGELOG.md` |
 | 2026-08-21 | **`package.json`/`setup.bat` 保持与上游一致，安装问题改由 GUI 侧解决**：npm 11.17 中 `npm run` 嵌套 `npm i` 会因用户级 `.npmrc` 的 `allow-scripts` 配置误报 EALLOWSCRIPTS（上游环境无此配置故 setup.bat 正常）。非 GUI 文件（`package.json`/`setup.bat`）已回滚至上游版本零差异；改为 `gui/lib/routes/system.js` 的 `/api/setup` 在 spawn `setup.bat` 前注入剔除 `allow-scripts` 的干净 `NPM_CONFIG_USERCONFIG`（详见 `gui/CHANGELOG.md` 同日条目） |
 | 2026-08-21 | **次要问题收尾：P2 清零 + 工程化补全**（详见 `gui/CHANGELOG.md` 同日条目）：D18 前端超时/轮询退避（R-F03/R-F04 转绿，测试 157 用例全绿）、HTTP 服务超时、日志接口 405 补全、archive 路径拼接注入修复、`package.json` test 脚本、`.bak` 轮转（保留最近 5 个）与 cache 7 天清理 |

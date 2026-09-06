@@ -361,6 +361,40 @@ describe('U-S summary 统计聚合', () => {
         assert.strictEqual(f[1], '723')
     })
 
+    test('U-SM1 v3 会话 json 迁移进 v4 sessions.db（cookies→StorageState、指纹保留）', () => {
+        const { DatabaseSync } = require('node:sqlite')
+        const emailDir = path.join(SB, 'sessions', 'migrate@test.com')
+        fs.mkdirSync(emailDir, { recursive: true })
+        const cookies = [{ name: 'SES', value: 'v', domain: '.live.com', path: '/', expires: -1, httpOnly: true, secure: true, sameSite: 'None' }]
+        const fingerprint = { fingerprint: { screen: { width: 360 } }, headers: { 'user-agent': 'UA' } }
+        fs.writeFileSync(path.join(emailDir, 'session_mobile.json'), JSON.stringify(cookies))
+        fs.writeFileSync(path.join(emailDir, 'session_fingerprint_mobile.json'), JSON.stringify(fingerprint))
+        const { migrated, dbPath } = H.loadGuiModule(SB, 'lib/sessionMigrate').migrateV3JsonToDb()
+        assert.strictEqual(migrated, 1)
+        assert.strictEqual(dbPath, path.join(SB, 'sessions', 'sessions.db'))
+        const db = new DatabaseSync(dbPath)
+        try {
+            const row = db.prepare('SELECT storage_state, fingerprint, platform FROM sessions WHERE email = ?').get('migrate@test.com')
+            assert.ok(row, 'sessions 表中无迁移行')
+            assert.strictEqual(row.platform, 'mobile')
+            const st = JSON.parse(row.storage_state)
+            assert.deepStrictEqual(st, { cookies, origins: [] }, 'storage_state 应为 {cookies, origins:[]}（v4 Browser 直接访问两字段）')
+            assert.deepStrictEqual(JSON.parse(row.fingerprint), fingerprint)
+        } finally { db.close() }
+    })
+
+    test('U-SM2 重复迁移 upsert 不产生重复行且指纹 COALESCE 保留', () => {
+        const mod = H.loadGuiModule(SB, 'lib/sessionMigrate')
+        mod.migrateV3JsonToDb()
+        mod.migrateV3JsonToDb()
+        const { DatabaseSync } = require('node:sqlite')
+        const db = new DatabaseSync(path.join(SB, 'sessions', 'sessions.db'))
+        try {
+            const n = db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE email = ?').get('migrate@test.com')
+            assert.strictEqual(n.n, 1, '重复迁移产生重复行')
+        } finally { db.close() }
+    })
+
     test('U-S10 写入不可写目标时返回 null 而非抛异常', () => {
         assert.strictEqual(summary.writeSummaryFile({ a: 1 }, config.LOGS_DIR), null)
     })

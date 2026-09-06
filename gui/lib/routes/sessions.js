@@ -7,6 +7,7 @@
 const fs = require('fs')
 const path = require('path')
 const sessionFiles = require('../sessionFiles')
+const sessionMigrate = require('../sessionMigrate')
 
 // 允许导入的会话文件名：v4 单库（含 WAL 伴生）+ v3 按账号的 json（旧格式包兼容）
 const IMPORT_NAME_RE = /^(sessions\.db(-wal|-shm)?|session_.*\.json)$/
@@ -54,10 +55,18 @@ function handleSessions(req, res, pathname, ctx) {
                 if (tmpRoot) { try { fs.rmSync(tmpRoot, { recursive: true, force: true }) } catch {} ; tmpRoot = null }
 
                 if (!imported.length) return http.sendJson(res, 400, { error: '压缩包内未找到会话文件（v4: sessions.db*；v3: session_*.json），导入失败' })
-                console.log(`[GUI] 已导入 ${imported.length} 个会话文件 → ${sessionFiles.getSessionDir()}`)
+                // v3 json 会话迁移进 v4 sessions.db（v4 只读 db，不迁移则仍会走密码登录）
+                let migrateNote = ''
+                try {
+                    const { migrated } = sessionMigrate.migrateV3JsonToDb()
+                    if (migrated) migrateNote = `，已迁移 ${migrated} 条会话到 v4 会话库（sessions.db）`
+                } catch (e) {
+                    migrateNote = `（v4 会话库迁移失败: ${e.message}）`
+                }
+                console.log(`[GUI] 已导入 ${imported.length} 个会话文件 → ${sessionFiles.getSessionDir()}${migrateNote}`)
                 return http.sendJson(res, 200, {
                     success: true,
-                    message: `已导入 ${imported.length} 个会话文件`,
+                    message: `已导入 ${imported.length} 个会话文件${migrateNote}`,
                     files: imported,
                     target: sessionFiles.getSessionDir()
                 })
