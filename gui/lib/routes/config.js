@@ -12,13 +12,14 @@ const cleanup = require('../cleanup')
 // 写入期间到达的新请求直接返回 409，由前端稍后重试，保证同一时刻只有一个写入者。
 let isWriting = false
 
-// 顶层字段白名单（来源：src/config.example.json 的顶层键）。
+// 顶层字段白名单（来源：v4 config.example.json 的顶层键，分支 gui-v4-api 起对齐 V4-china）。
 // 语义是白名单而非黑名单：PUT 走 { ...current, ...body } 合并写回，未列入的字段会直接落盘
 // 污染脚本配置。新增配置项时需同步此处。
 const ALLOWED_TOP_LEVEL = new Set([
-    'baseURL', 'sessionPath', 'headless', 'clusters', 'errorDiagnostics', 'ensureStreakProtection',
-    'workers', 'searchOnBingLocalQueries', 'globalTimeout', 'searchSettings', 'debugLogs',
-    'consoleLogFilter', 'proxy', 'webhook'
+    'sessionPath', 'headless', 'clusters', 'errorDiagnostics', 'ensureStreakProtection',
+    'autoClaimPunchcardRewards', 'contintueOnBotWarning', 'skipNonPointTasks', 'accountDelay',
+    'workers', 'activities', 'searchOnBingLocalQueries', 'globalTimeout', 'searchSettings',
+    'experimental', 'debugLogs', 'consoleLogFilter', 'proxy', 'webhook'
 ])
 
 // 宽松校验：布尔/字符串字段类型检查，返回错误数组
@@ -26,16 +27,34 @@ function validateConfigBody(body) {
     const errors = []
     const unknown = Object.keys(body).filter(k => !ALLOWED_TOP_LEVEL.has(k))
     if (unknown.length) errors.push(`不支持的配置字段: ${unknown.join('、')}`)
-    for (const f of ['headless', 'ensureStreakProtection', 'errorDiagnostics', 'debugLogs', 'searchOnBingLocalQueries']) {
+    for (const f of ['headless', 'ensureStreakProtection', 'errorDiagnostics', 'debugLogs',
+        'searchOnBingLocalQueries', 'autoClaimPunchcardRewards', 'contintueOnBotWarning', 'skipNonPointTasks']) {
         if (body[f] !== undefined && typeof body[f] !== 'boolean') errors.push(`${f} 必须是布尔值`)
     }
-    if (body.workers !== undefined) {
-        if (!body.workers || typeof body.workers !== 'object' || Array.isArray(body.workers)) {
-            errors.push('workers 必须是一个对象')
-        } else {
-            for (const [k, v] of Object.entries(body.workers)) {
-                if (typeof v !== 'boolean') errors.push(`workers.${k} 必须是布尔值`)
+    if (body.clusters !== undefined && (!Number.isInteger(body.clusters) || body.clusters < 1)) {
+        errors.push('clusters 必须是正整数')
+    }
+    for (const f of ['globalTimeout', 'sessionPath']) {
+        if (body[f] !== undefined && typeof body[f] !== 'string') errors.push(`${f} 必须是字符串`)
+    }
+    // 布尔开关对象：accountDelay 为 {min,max} 字符串对，workers/activities/experimental 为布尔映射
+    for (const f of ['workers', 'activities', 'experimental']) {
+        if (body[f] !== undefined) {
+            if (!body[f] || typeof body[f] !== 'object' || Array.isArray(body[f])) {
+                errors.push(`${f} 必须是一个对象`)
+            } else {
+                for (const [k, v] of Object.entries(body[f])) {
+                    if (typeof v !== 'boolean') errors.push(`${f}.${k} 必须是布尔值`)
+                }
             }
+        }
+    }
+    if (body.accountDelay !== undefined) {
+        const ad = body.accountDelay
+        if (!ad || typeof ad !== 'object' || Array.isArray(ad)) errors.push('accountDelay 必须是一个对象')
+        else {
+            if (ad.min !== undefined && typeof ad.min !== 'string') errors.push('accountDelay.min 必须是字符串')
+            if (ad.max !== undefined && typeof ad.max !== 'string') errors.push('accountDelay.max 必须是字符串')
         }
     }
     if (body.searchSettings !== undefined) {
@@ -43,8 +62,11 @@ function validateConfigBody(body) {
         if (!ss || typeof ss !== 'object' || Array.isArray(ss)) {
             errors.push('searchSettings 必须是一个对象')
         } else {
-            if (ss.scrollRandomResults !== undefined && typeof ss.scrollRandomResults !== 'boolean') errors.push('searchSettings.scrollRandomResults 必须是布尔值')
-            if (ss.clickRandomResults !== undefined && typeof ss.clickRandomResults !== 'boolean') errors.push('searchSettings.clickRandomResults 必须是布尔值')
+            for (const f of ['scrollRandomResults', 'clickRandomResults', 'runOnZeroPoints', 'parallelSearching', 'clusterSearch']) {
+                if (ss[f] !== undefined && typeof ss[f] !== 'boolean') errors.push(`searchSettings.${f} 必须是布尔值`)
+            }
+            if (ss.maxBonusSearches !== undefined && (!Number.isInteger(ss.maxBonusSearches) || ss.maxBonusSearches < 0)) errors.push('searchSettings.maxBonusSearches 必须是非负整数')
+            if (ss.queryEngines !== undefined && (!Array.isArray(ss.queryEngines) || ss.queryEngines.some(e => typeof e !== 'string'))) errors.push('searchSettings.queryEngines 必须是字符串数组')
             if (ss.searchResultVisitTime !== undefined && typeof ss.searchResultVisitTime !== 'string') errors.push('searchSettings.searchResultVisitTime 必须是字符串')
             if (ss.searchDelay !== undefined) {
                 if (!ss.searchDelay || typeof ss.searchDelay !== 'object' || Array.isArray(ss.searchDelay)) errors.push('searchSettings.searchDelay 必须是一个对象')
@@ -62,13 +84,13 @@ function validateConfigBody(body) {
             }
         }
     }
-    for (const f of ['baseURL', 'globalTimeout', 'sessionPath']) {
-        if (body[f] !== undefined && typeof body[f] !== 'string') errors.push(`${f} 必须是字符串`)
-    }
     if (body.proxy !== undefined) {
         const px = body.proxy
         if (!px || typeof px !== 'object' || Array.isArray(px)) errors.push('proxy 必须是一个对象')
-        else if (px.queryEngine !== undefined && typeof px.queryEngine !== 'boolean') errors.push('proxy.queryEngine 必须是布尔值')
+        else {
+            if (px.queryEngine !== undefined && typeof px.queryEngine !== 'boolean') errors.push('proxy.queryEngine 必须是布尔值')
+            if (px.ignoreCertificateErrors !== undefined && typeof px.ignoreCertificateErrors !== 'boolean') errors.push('proxy.ignoreCertificateErrors 必须是布尔值')
+        }
     }
     if (body.consoleLogFilter !== undefined) {
         const clf = body.consoleLogFilter
@@ -164,7 +186,10 @@ function handleConfig(req, res, pathname, ctx) {
                 const curSS = current.searchSettings || {}
                 const merged = {
                     ...current, ...body,
+                    ...(body.accountDelay ? { accountDelay: { ...(current.accountDelay || {}), ...body.accountDelay } } : {}),
                     ...(body.workers ? { workers: { ...(current.workers || {}), ...body.workers } } : {}),
+                    ...(body.activities ? { activities: { ...(current.activities || {}), ...body.activities } } : {}),
+                    ...(body.experimental ? { experimental: { ...(current.experimental || {}), ...body.experimental } } : {}),
                     ...(body.proxy ? { proxy: { ...(current.proxy || {}), ...body.proxy } } : {}),
                     ...(body.consoleLogFilter ? { consoleLogFilter: { ...(current.consoleLogFilter || {}), ...body.consoleLogFilter } } : {}),
                     ...(body.searchSettings
@@ -211,14 +236,18 @@ function handleConfig(req, res, pathname, ctx) {
         }
     }
 
-    // POST /api/config/reset（以 src/config.example.json 为模板覆盖）
+    // POST /api/config/reset（以 v4 根目录 config.example.json 为模板覆盖；src/ 仅回退）
     if (pathname === '/api/config/reset' && req.method === 'POST') {
         return (async () => {
             const configPath = config.resolveConfigPath()
-            const defaultTemplate = path.join(config.ROOT, 'src', 'config.example.json')
+            const templateCandidates = [
+                path.join(config.ROOT, 'config.example.json'),
+                path.join(config.ROOT, 'src', 'config.example.json')
+            ]
+            const defaultTemplate = templateCandidates.find(p => fs.existsSync(p))
             try {
-                if (!fs.existsSync(defaultTemplate)) {
-                    return http.sendJson(res, 500, { error: '无法找到默认配置模板: src/config.example.json' })
+                if (!defaultTemplate) {
+                    return http.sendJson(res, 500, { error: '无法找到默认配置模板: config.example.json' })
                 }
                 const defaults = JSON.parse(fs.readFileSync(defaultTemplate, 'utf-8'))
                 const backupPath = configPath + '.bak'

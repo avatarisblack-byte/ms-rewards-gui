@@ -57,7 +57,7 @@ before(async () => {
         logger: H.loadGuiModule(SB, 'lib/logger'),
         summary: H.loadGuiModule(SB, 'lib/summary'),
         archive: H.loadGuiModule(SB, 'lib/archive'),
-        taskManager: H.loadGuiModule(SB, 'lib/taskManager'),
+        apiBridge: H.loadGuiModule(SB, 'lib/apiBridge'),
         logCache: H.loadGuiModule(SB, 'lib/logCache'),
     }
     routeAccounts = H.loadGuiModule(SB, 'lib/routes/accounts')

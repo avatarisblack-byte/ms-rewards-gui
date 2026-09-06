@@ -26,15 +26,21 @@ let seq = 0
 
 function fixtureConfig() {
     return {
-        baseURL: 'https://rewards.bing.com',
         sessionPath: 'sessions',
         headless: false,
+        clusters: 1,
         ensureStreakProtection: true,
+        autoClaimPunchcardRewards: false,
+        contintueOnBotWarning: false,
+        skipNonPointTasks: true,
         errorDiagnostics: false,
         debugLogs: false,
-        globalTimeout: '30s',
+        globalTimeout: '50sec',
         searchOnBingLocalQueries: false,
-        workers: { doDailySet: true, doMorePromotions: true, doPunchCards: false },
+        accountDelay: { min: '1min', max: '3min' },
+        workers: { doDailySet: true, doClaimBonusPoints: true, doMorePromotions: true, doPunchCards: false },
+        activities: { urlReward: true, searchOnBing: true },
+        experimental: { apiSearch: false, edgeBrowsing: false },
         proxy: { queryEngine: false },
         consoleLogFilter: { enabled: false, levels: [] },
         searchSettings: {
@@ -57,7 +63,7 @@ function fixtureAccount(email = 'tester.a@example.com') {
         recoveryEmail: '',
         geoLocale: 'auto',
         langCode: 'zh',
-        proxy: { proxyAxios: false, url: '', port: 0, username: '', password: '' },
+        proxy: { proxyHttp: false, url: '', port: 0, username: '', password: '' },
         saveFingerprint: { mobile: true, desktop: true },
     }
 }
@@ -171,7 +177,10 @@ function loadGuiModule(root, relative) {
  */
 function startServerInProcess(root, port) {
     const prevPort = process.env.PORT
+    const prevBridge = process.env.GUI_API_BRIDGE
     process.env.PORT = String(port)
+    // 方案 C：测试环境禁用上游 Control API 桥接，任务接口走降级分支（不 spawn 真实子进程）
+    process.env.GUI_API_BRIDGE = 'off'
     const originalCreate = http.createServer
     let captured = null
     http.createServer = function patched(...args) {
@@ -184,6 +193,8 @@ function startServerInProcess(root, port) {
         http.createServer = originalCreate
         if (prevPort === undefined) delete process.env.PORT
         else process.env.PORT = prevPort
+        if (prevBridge === undefined) delete process.env.GUI_API_BRIDGE
+        else process.env.GUI_API_BRIDGE = prevBridge
     }
     if (!captured) throw new Error('未捕获到 http server 实例')
     return {

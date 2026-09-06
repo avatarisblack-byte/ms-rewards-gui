@@ -43,7 +43,7 @@ function validateAccountShape(acc) {
     if (!p || typeof p !== 'object' || Array.isArray(p)) {
         errors.push('proxy 必须是一个对象')
     } else {
-        if (typeof p.proxyAxios !== 'boolean') errors.push('proxy.proxyAxios 必须是布尔值')
+        if (typeof p.proxyHttp !== 'boolean') errors.push('proxy.proxyHttp 必须是布尔值')
         if (typeof p.url !== 'string') errors.push('proxy.url 必须是字符串')
         if (typeof p.port !== 'number' || !Number.isInteger(p.port) || p.port < 0 || p.port > 65535) errors.push('proxy.port 必须是 0-65535 之间的整数')
         if (typeof p.username !== 'string') errors.push('proxy.username 必须是字符串')

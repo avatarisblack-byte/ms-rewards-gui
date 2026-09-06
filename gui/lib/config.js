@@ -53,6 +53,7 @@ function resolveConfigPath() {
     const candidates = [
         path.join(ROOT, 'config.json'),
         path.join(ROOT, 'dist', 'config.json'),
+        path.join(ROOT, 'config.example.json'),
         path.join(ROOT, 'src', 'config.example.json')
     ]
     for (const p of candidates) {

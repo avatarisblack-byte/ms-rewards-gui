@@ -94,7 +94,7 @@ describe('I-C 全局配置接口', () => {
     test('I-C01 GET /api/config 返回配置对象', async () => {
         const r = await H.request(BASE, '/api/config')
         assert.strictEqual(r.status, 200)
-        assert.strictEqual(r.json.baseURL, 'https://rewards.bing.com')
+        assert.strictEqual(r.json.sessionPath, 'sessions')
     })
 
     test('I-C02 PUT 空请求体返回 400', async () => {

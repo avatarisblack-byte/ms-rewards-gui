@@ -374,7 +374,7 @@
             list.innerHTML = accounts.map((acc, idx) => {
                 const log = findLogStatus(acc.email);
                 const status = getAccountStatus(log);
-                const proxyEnabled = acc.proxy && acc.proxy.proxyAxios;
+                const proxyEnabled = acc.proxy && acc.proxy.proxyHttp;
 
                 // 共性配置摘要（次要信息，弱化展示）：saveFingerprint / geoLocale / langCode 均为
                 // 账号配置属性（新增时后端默认填充），并非运行记录；不再以彩色徽章展示，
@@ -985,7 +985,6 @@
             };
 
             // 基础参数
-            set('cfg-baseURL', cfg.baseURL);
             set('cfg-globalTimeout', cfg.globalTimeout);
             set('gui-port-input', guiSettingsCache.port);
             set('cfg-headless', cfg.headless);
@@ -998,7 +997,6 @@
             const w = cfg.workers || {};
             set('cfg-workers-doDailySet', w.doDailySet);
             set('cfg-workers-doClaimBonusPoints', w.doClaimBonusPoints);
-            set('cfg-workers-doSpecialPromotions', w.doSpecialPromotions);
             set('cfg-workers-doMorePromotions', w.doMorePromotions);
             set('cfg-workers-doPunchCards', w.doPunchCards);
             set('cfg-workers-doAppPromotions', w.doAppPromotions);
@@ -1006,6 +1004,9 @@
             set('cfg-workers-doMobileSearch', w.doMobileSearch);
             set('cfg-workers-doDailyCheckIn', w.doDailyCheckIn);
             set('cfg-workers-doReadToEarn', w.doReadToEarn);
+            set('cfg-workers-doBonusSearches', w.doBonusSearches);
+            set('cfg-workers-doActivateSearchPerk', w.doActivateSearchPerk);
+            set('cfg-workers-doVisualSearch', w.doVisualSearch);
 
             // 低风险新增项
             const px = cfg.proxy || {};
@@ -1044,7 +1045,6 @@
         // ===== 全局配置即时保存 =====
         // 字段映射表：控件 id → config 嵌套路径（用于增量提交，后端为合并写回）
         const CONFIG_FIELD_MAP = {
-            'cfg-baseURL': ['baseURL'],
             'cfg-globalTimeout': ['globalTimeout'],
             'cfg-headless': ['headless'],
             'cfg-ensureStreakProtection': ['ensureStreakProtection'],
@@ -1055,7 +1055,6 @@
             'cfg-consoleLogFilter-enabled': ['consoleLogFilter', 'enabled'],
             'cfg-workers-doDailySet': ['workers', 'doDailySet'],
             'cfg-workers-doClaimBonusPoints': ['workers', 'doClaimBonusPoints'],
-            'cfg-workers-doSpecialPromotions': ['workers', 'doSpecialPromotions'],
             'cfg-workers-doMorePromotions': ['workers', 'doMorePromotions'],
             'cfg-workers-doPunchCards': ['workers', 'doPunchCards'],
             'cfg-workers-doAppPromotions': ['workers', 'doAppPromotions'],
@@ -1063,6 +1062,9 @@
             'cfg-workers-doMobileSearch': ['workers', 'doMobileSearch'],
             'cfg-workers-doDailyCheckIn': ['workers', 'doDailyCheckIn'],
             'cfg-workers-doReadToEarn': ['workers', 'doReadToEarn'],
+            'cfg-workers-doBonusSearches': ['workers', 'doBonusSearches'],
+            'cfg-workers-doActivateSearchPerk': ['workers', 'doActivateSearchPerk'],
+            'cfg-workers-doVisualSearch': ['workers', 'doVisualSearch'],
             'cfg-scrollRandomResults': ['searchSettings', 'scrollRandomResults'],
             'cfg-clickRandomResults': ['searchSettings', 'clickRandomResults'],
             'cfg-searchResultVisitTime': ['searchSettings', 'searchResultVisitTime'],
@@ -1429,8 +1431,8 @@
             document.getElementById('settings-fp-mobile').checked = Boolean(fp.mobile);
 
             // === 网络代理 ===
-            const proxy = acc.proxy || { proxyAxios: false, url: '', port: 0, username: '', password: '' };
-            document.getElementById('settings-proxy-enabled').checked = Boolean(proxy.proxyAxios);
+            const proxy = acc.proxy || { proxyHttp: false, url: '', port: 0, username: '', password: '' };
+            document.getElementById('settings-proxy-enabled').checked = Boolean(proxy.proxyHttp);
             document.getElementById('settings-proxy-url').value = proxy.url || '';
             document.getElementById('settings-proxy-port').value = proxy.port || 0;
             document.getElementById('settings-proxy-username').value = proxy.username || '';
@@ -1462,7 +1464,7 @@
                     mobile: document.getElementById('settings-fp-mobile').checked
                 },
                 proxy: {
-                    proxyAxios: proxyEnabled,
+                    proxyHttp: proxyEnabled,
                     url: document.getElementById('settings-proxy-url').value || '',
                     port: parseInt(document.getElementById('settings-proxy-port').value, 10) || 0,
                     username: document.getElementById('settings-proxy-username').value || '',

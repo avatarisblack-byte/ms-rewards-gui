@@ -259,10 +259,6 @@
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                         <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Base URL (基础地址)</label>
-                            <input id="cfg-baseURL" type="text" value="https://rewards.bing.com" readonly class="w-full border border-gray-200 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-500" title="基础地址为高风险字段，如需修改请直接编辑 config.json">
-                        </div>
-                        <div>
                             <label class="block text-sm font-semibold text-gray-700 mb-1.5">全局超时时间 (Global Timeout)</label>
                             <input id="cfg-globalTimeout" type="text" value="50sec" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
                         </div>
@@ -363,10 +359,6 @@
                             <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">额外奖励 (ClaimBonus)</span>
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer group">
-                            <input id="cfg-workers-doSpecialPromotions" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
-                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">特别活动 (SpecialPromo)</span>
-                        </label>
-                        <label class="flex items-center gap-2 cursor-pointer group">
                             <input id="cfg-workers-doMorePromotions" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
                             <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">更多活动 (MorePromo)</span>
                         </label>
@@ -397,6 +389,18 @@
                         <label class="flex items-center gap-2 cursor-pointer group">
                             <input id="cfg-workers-doReadToEarn" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
                             <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">阅读奖励 (ReadToEarn)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doBonusSearches" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">额外搜索 (BonusSearch)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doActivateSearchPerk" type="checkbox" checked class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">搜索加成 (SearchPerk)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input id="cfg-workers-doVisualSearch" type="checkbox" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 group-hover:text-blue-600 transition-colors">视觉搜索 (VisualSearch)</span>
                         </label>
                     </div>
                 </div>
@@ -598,7 +602,7 @@
                     <h4 class="text-sm font-bold text-gray-800 mb-3 uppercase tracking-wide border-b border-gray-100 pb-1">专属网络代理 (Proxy)</h4>
                     <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
                             <div class="flex items-center justify-between">
-                                <span class="text-sm font-medium text-gray-700">为此账号启用独立代理 (proxyAxios)</span>
+                                <span class="text-sm font-medium text-gray-700">为此账号启用独立代理 (proxyHttp)</span>
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input id="settings-proxy-enabled" type="checkbox" class="sr-only peer" onchange="applyProxyFieldsVisibility()">
                                 <div class="toggle-track w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-transform after:duration-200 after:ease-out peer-checked:after:translate-x-full"></div>

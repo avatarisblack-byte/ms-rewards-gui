@@ -14,7 +14,7 @@ const validator = require('./lib/validator')
 const logger = require('./lib/logger')
 const summary = require('./lib/summary')
 const archive = require('./lib/archive')
-const taskManager = require('./lib/taskManager')
+const apiBridge = require('./lib/apiBridge')
 const logCache = require('./lib/logCache')
 
 // ===== 路由处理器（统一签名 (req,res,pathname,ctx)=>boolean，true=已处理） =====
@@ -28,7 +28,9 @@ const rTasks = require('./lib/routes/tasks')
 const rSystem = require('./lib/routes/system')
 
 // ===== 共享上下文（注入依赖，规避循环 require） =====
-const ctx = { config, http: httpUtils, validator, logger, summary, archive, taskManager, logCache }
+// 方案 C（gui-v4-api）：任务进程管理由上游 Control API（scripts/api/server.js）承担，
+// 原 taskManager 已由 lib/apiBridge.js 取代；配置/账号/日志仍走 GUI 本地实现。
+const ctx = { config, http: httpUtils, validator, logger, summary, archive, apiBridge, logCache }
 const routes = [rStatic, rConfig, rAccounts, rSessions, rData, rTasks, rLogs, rSystem]
 
 // ===== 本地 Token 鉴权（2026-08-21） =====
@@ -137,6 +139,12 @@ fs.writeFileSync(PID_FILE, String(process.pid))
 // 正常退出时清理 pid 文件；强杀残留由下次启动的存活检测兜底
 process.on('exit', () => { try { fs.unlinkSync(PID_FILE) } catch {} })
 
+// GUI 退出时收尾由桥接拉起的上游 Control API 子进程（exit 钩子内只能同步操作）
+process.on('exit', () => apiBridge.shutdownBridge())
+for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => { apiBridge.shutdownBridge(); process.exit(0) })
+}
+
 // EADDRINUSE 兜底（Linux/macOS 等严格 bind 语义的平台）：端口被非 GUI 进程占用时同样友好退出
 server.on('error', err => {
     if (err.code === 'EADDRINUSE') {
@@ -154,4 +162,6 @@ server.listen(config.PORT, () => {
     console.log(`账号文件: ${config.resolveAccountsPath()}`)
     console.log(`配置来源: ${config.resolveConfigPath()}`)
     console.log(`日志目录: ${config.LOGS_DIR}`)
+    // 方案 C：任务进程由上游 Control API 管理（首次启动任务时惰性拉起，端口见 lib/apiBridge.js）
+    console.log(`控制 API: ${process.env.GUI_API_BRIDGE === 'off' ? '桥接已禁用' : `http://127.0.0.1:${process.env.GUI_API_PORT || config.readGuiSettings().apiPort || 3010}（首次启动任务时自动拉起）`}`)
 })

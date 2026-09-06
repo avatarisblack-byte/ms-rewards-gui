@@ -16,7 +16,7 @@ function buildNewAccount(body) {
         langCode: typeof body.langCode === 'string' ? body.langCode : 'zh',
         proxy: body.proxy && typeof body.proxy === 'object' && !Array.isArray(body.proxy)
             ? body.proxy
-            : { proxyAxios: false, url: '', port: 0, username: '', password: '' },
+            : { proxyHttp: false, url: '', port: 0, username: '', password: '' },
         saveFingerprint: body.saveFingerprint && typeof body.saveFingerprint === 'object' && !Array.isArray(body.saveFingerprint)
             ? body.saveFingerprint
             : { mobile: true, desktop: true }
