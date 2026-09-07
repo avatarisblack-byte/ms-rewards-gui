@@ -15,9 +15,14 @@ const { LOGS_DIR } = require('./config')
 // run 级事件（全局/集群/进程级）：这类日志行的 [账户] 字段来自上游动态 userName，
 // 循环结束后可能残留"最后一个账号名"而非"主进程"，不能按 account 可靠过滤，
 // 必须按 event 跳过，避免污染账号卡片的 lastEvent 与运行段归属（2026-08-23）
+// ACCOUNT-DELAY（2026-09-07 补充，v4 新增）：账号完成后的账号间延迟事件，[账户] 字段
+// 挂在**前一个账号**名下（"等待 X 秒后开始下一个账户 (下一账号)"），紧跟 ACCOUNT-END
+// 之后出现，会把该账号 lastEvent 从 ACCOUNT-END 覆盖成 ACCOUNT-DELAY——前端
+// parseAccountEnd 因此丢失「账户完成」指示（实测仅末账号幸存，与 RUN-END 污染同构）
 const RUN_LEVEL_EVENTS = new Set([
     'RUN-START',
     'RUN-END',
+    'ACCOUNT-DELAY',
     'CLUSTER-PRIMARY',
     'CLUSTER-WORKER-START',
     'CLUSTER-WORKER-TASK',

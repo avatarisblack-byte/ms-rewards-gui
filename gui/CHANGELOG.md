@@ -12,6 +12,8 @@ GUI 控制面板（`gui/`）的变更历史。于 2026-08-20 从 `doc/CODE_MAP.m
 
 | 日期 | 内容 |
 |------|------|
+| 2026-09-07 | **修复：ACCOUNT-DELAY 覆盖已完成账号的「账户完成」指示（用户当日实测反馈）**：v4 新增的账号间延迟事件 ACCOUNT-DELAY 的 [账户] 字段挂在**前一个账号**名下（「等待 X 秒后开始下一个账户 (下一账号)」）且紧跟 ACCOUNT-END 之后——summarizeLogs 无条件赋值 lastEvent/lastMessage，导致除末账号外全部账号的 lastEvent 被覆盖成 ACCOUNT-DELAY，前端 parseAccountEnd（要求 lastEvent===ACCOUNT-END）丢失「账户完成」状态块（实测 4 账号仅末账号幸存，与 2026-08-23 RUN-END 污染同构）。修复：summary.js 的 RUN_LEVEL_EVENTS 黑名单加入 ACCOUNT-DELAY（summarizeLogs/generateSummary 双处 continue，段结束日不再被 DELAY 行拖后）；ACCOUNT-ERROR/SKIP/BOT-WARNING 为账号真实状态（比完成更值得显示）有意保留。前端零改动。实测当日日志：4 账号 lastEvent 全部恢复 ACCOUNT-END，运行段口径正常（今日 2869 / grandTotal 8101）。测试新增 U-R05（含「DELAY 行必须被解析」前置断言，防走「解析失败」假阳性路径），177 用例全绿 |
+
 | 2026-09-06 | **新功能：GUI 以独立应用窗口启动（用户需求）**：`start-gui.bat` 浏览器打开逻辑改为三级回退——Edge `--app` 模式（无标签栏/地址栏、任务栏独立图标，`--window-size=1400,900`）→ Chrome `--app` → 默认浏览器普通标签（legacy 回退）；纯 ASCII 注释遵守既有约束，块内注释用 rem（`::` 在括号块内会被当标签解析报错），含括号的 `Program Files (x86)` 路径靠引号保护（cmd 仅在引号外识别块括号）；页面新增内联 SVG favicon（奖杯），`--app` 窗口标题栏/任务栏不再显示默认地球图标；静默模式 `start-gui-silent.vbs` 跑同一 bat 自动获得新行为。实测 Edge --app 独立窗口弹出正常 |
 
 | 2026-09-06 | **新功能：环境已安装状态提示（方案 A）**：`routes/system.js` 新增只读 `GET /api/setup/status`——实质判据实时检测（deps=node_modules/patchright、browser=patchright 浏览器缓存 chromium*（PLAYWRIGHT_BROWSERS_PATH→三平台标准路径）、build=dist/index.js，附带 envFile=.env 账号提示），比 setup.bat 留标记更可靠（手动 npm i/构建同样识别）；前端按钮双形态——installed 时切绿色 `.btn-installed`「✓ 环境已安装」（点击打开环境详情弹窗：各项 ✓/✗ + 重新运行安装程序入口），未安装保持原样；点安装后 10s 轮询直至就绪（15 分钟上限）自动切换；环境已就绪时首次打开不再弹「环境安装提示」弹窗。测试新增 I-Y06（字段结构+沙箱翻转+组合一致性），176 用例全绿 |

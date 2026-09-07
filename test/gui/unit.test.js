@@ -496,6 +496,29 @@ describe('U-R RUN-END 归属与收益三口径自洽', () => {
         const s = summary.generateSummary(dir)
         assert.strictEqual(s.todayTotal, 132, `末尾账号收益被 RUN-END 拖入次日，今日总收益 ${s.todayTotal}（应为 132）`)
     })
+
+    test('U-R05 v4 ACCOUNT-DELAY 行不覆盖已完成账号的 lastEvent=ACCOUNT-END', () => {
+        // v4 的 ACCOUNT-DELAY（账号间延迟）挂在**前一个账号**字段下且紧跟 ACCOUNT-END，
+        // 未过滤时会把该账号 lastEvent 覆盖成 ACCOUNT-DELAY——前端 parseAccountEnd
+        // 因此丢失「账户完成」指示（2026-09-07 实测：仅末账号有完成指示，其余全部丢失）
+        const t1 = '2026-09-07T08:00:00.000Z'
+        const t2 = '2026-09-07T08:10:00.000Z'
+        const t3 = '2026-09-07T08:12:00.000Z'
+        const entries = [
+            logger.parseLogLine(H.logLine(t1, 'acct.a', 'INFO', '主进程', 'ACCOUNT-START', '开始处理账户: acct.a@example.com')),
+            logger.parseLogLine(H.logLine(t2, 'acct.a', 'INFO', '主进程', 'ACCOUNT-END', '已完成账户: acct.a@example.com | 总计: +55 | 原始: 100 → 新值: 155')),
+            // v4 文件行格式（writeLogToFile 前缀 formatLocalTimestamp），贴近真实
+            logger.parseLogLine('2026-09-07 16:12:00.123 [2026/9/7 16:12:00] [acct.a] [INFO] MAIN [ACCOUNT-DELAY] 等待 123.7 秒后开始下一个账户 (acct.b@example.com)'),
+        ].filter(Boolean)
+        // 前置：DELAY 行必须被成功解析（否则本用例走的是「解析失败」而非「黑名单过滤」路径）
+        assert.ok(entries[2], 'ACCOUNT-DELAY 行（v4 文件行格式）应可被解析')
+        assert.strictEqual(entries[2].event, 'ACCOUNT-DELAY')
+        const acc = summary.summarizeLogs(entries)[0]
+        assert.strictEqual(acc.account, 'acct.a')
+        assert.strictEqual(acc.lastEvent, 'ACCOUNT-END', `lastEvent 被 ACCOUNT-DELAY 覆盖: ${acc.lastEvent}`)
+        assert.match(acc.lastMessage, /已完成账户|账户完成/, 'lastMessage 应保留 ACCOUNT-END 的完成文案')
+        assert.strictEqual(acc.collectedPoints, 55)
+    })
 })
 
 // ============ archive：临时目录与压缩 ============
