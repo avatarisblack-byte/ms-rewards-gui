@@ -949,7 +949,7 @@
                 btn.classList.remove('btn-secondary');
                 btn.classList.add('btn-installed');
                 btn.title = '环境已就绪（依赖 / 浏览器内核 / 构建产物齐全）。点击查看详情。';
-                if (label) label.textContent = '✓ 环境已安装';
+                if (label) label.textContent = '环境已安装';
                 btn.onclick = showEnvStatusModal;
             } else {
                 btn.classList.add('btn-secondary');
